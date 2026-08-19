@@ -1,20 +1,34 @@
-// ===== CONFIG =====
-const SUPABASE_URL = 'https://your-project.supabase.co';
-const SUPABASE_ANON_KEY = 'your-anon-key';
+// ============================================================
+// PIXELFORGE AI - app.js
+// Works out of the box with ZERO API setup!
+// Plug in your keys later when ready.
+// ============================================================
+
+// ===== OPTIONAL: Add your keys here when ready =====
+const SUPABASE_URL = '';      // e.g. 'https://abcdefgh.supabase.co'
+const SUPABASE_ANON_KEY = ''; // e.g. 'eyJhbGciOiJIUzI1NiIs...'
+const OPENROUTER_KEY = '';    // e.g. 'sk-or-v1-...'
+
+// ===== AUTO-DETECT MODE =====
+const HAS_SUPABASE = SUPABASE_URL && SUPABASE_ANON_KEY;
+const HAS_OPENROUTER = OPENROUTER_KEY;
 
 let supabase = null;
-try {
-    if (window.supabase) {
+if (HAS_SUPABASE && window.supabase) {
+    try {
         supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        console.log('✅ Supabase connected');
+    } catch (e) {
+        console.log('⚠️ Supabase failed, using demo mode');
     }
-} catch (e) {
-    console.log('Supabase not configured - running in demo mode');
 }
 
 // ===== STATE =====
 let currentUser = null;
 let isGenerating = false;
+let isChatting = false;
 let generations = JSON.parse(localStorage.getItem('pixelforge_generations') || '[]');
+let chatHistory = JSON.parse(localStorage.getItem('pixelforge_chat') || '[]');
 let currentBilling = 'monthly';
 
 // ===== DOM ELEMENTS =====
@@ -22,26 +36,70 @@ const authOverlay = document.getElementById('authOverlay');
 const loginForm = document.getElementById('loginForm');
 const signupForm = document.getElementById('signupForm');
 const authMessage = document.getElementById('authMessage');
-const mainApp = document.getElementById('mainApp');
-const sidebar = document.getElementById('sidebar');
 const promptInput = document.getElementById('promptInput');
 const chatMessages = document.getElementById('chatMessages');
 const welcomeScreen = document.getElementById('welcomeScreen');
 const upgradeModal = document.getElementById('upgradeModal');
 const userMenu = document.getElementById('userMenu');
+const sidebar = document.getElementById('sidebar');
+
+// ===== DEMO CHAT RESPONSES (works without any API) =====
+const DEMO_RESPONSES = {
+    greetings: [
+        "Hey there! I'm PixelForge, your AI creative assistant. I can generate stunning images from your descriptions, or we can just chat! What would you like to create today?",
+        "Hello! Ready to bring your imagination to life? Just describe any image you want, and I'll generate it for you instantly!",
+        "Hi! I'm here to help you create amazing AI art. What scene, character, or concept should we bring to life?"
+    ],
+    imageRelated: [
+        "That sounds like an amazing concept! Let me generate that image for you right now...",
+        "Great idea! I'm creating that visual for you. One moment...",
+        "Love that prompt! Generating your masterpiece now...",
+        "Interesting vision! Let me bring it to life with AI..."
+    ],
+    creative: [
+        "As an AI creative assistant, I specialize in turning your ideas into stunning visuals. Try describing a scene like 'a cyberpunk city at sunset' or 'a dragon made of stars'!",
+        "I can help you explore endless creative possibilities. From photorealistic landscapes to abstract art, fantasy characters to architectural concepts — just describe it!",
+        "PixelForge is powered by cutting-edge AI image generation. Every prompt creates a unique, never-before-seen image. What shall we create?"
+    ],
+    help: [
+        "Here's how PixelForge works: Type any image description in the box below and press Enter. I'll generate a unique AI image based on your prompt. You can also ask me questions!",
+        "Tips for great results: Be specific! Instead of 'a cat', try 'a fluffy orange cat wearing sunglasses, sitting on a beach chair, photorealistic, 8k'. The more detail, the better!",
+        "You can generate: portraits, landscapes, concept art, logos, abstract art, characters, architecture, and more. What type of image are you in the mood for?"
+    ],
+    fallback: [
+        "That's fascinating! While I think about that, would you like me to generate an image? Just describe what you'd like to see!",
+        "Interesting perspective! I'm primarily an image generation AI — want to test my creative powers? Describe any scene and I'll make it real!",
+        "I love where this conversation is going! Shall we channel that creativity into an image? What visual masterpiece should we create?"
+    ]
+};
+
+function getDemoResponse(input) {
+    const lower = input.toLowerCase();
+    if (/^(hi|hello|hey|greetings|yo|sup)/.test(lower)) {
+        return pickRandom(DEMO_RESPONSES.greetings);
+    }
+    if (/image|picture|photo|generate|create|draw|paint|make|art|design/.test(lower)) {
+        return pickRandom(DEMO_RESPONSES.imageRelated);
+    }
+    if (/help|how|what can you|tips|guide/.test(lower)) {
+        return pickRandom(DEMO_RESPONSES.help);
+    }
+    if (/who are you|what are you|pixel|forge|ai|creative/.test(lower)) {
+        return pickRandom(DEMO_RESPONSES.creative);
+    }
+    return pickRandom(DEMO_RESPONSES.fallback);
+}
+
+function pickRandom(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
+}
 
 // ===== AUTH FUNCTIONS =====
 function switchAuthTab(tab, btn) {
     document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
     btn.classList.add('active');
-
-    if (tab === 'login') {
-        loginForm.classList.remove('hidden');
-        signupForm.classList.add('hidden');
-    } else {
-        loginForm.classList.add('hidden');
-        signupForm.classList.remove('hidden');
-    }
+    loginForm.classList.toggle('hidden', tab !== 'login');
+    signupForm.classList.toggle('hidden', tab !== 'signup');
     hideAuthMessage();
 }
 
@@ -68,16 +126,15 @@ loginForm.addEventListener('submit', async (e) => {
         if (error) {
             showAuthMessage(error.message, 'error');
             btn.disabled = false;
-        } else {
-            currentUser = data.user;
-            enterApp();
+            return;
         }
+        currentUser = data.user;
     } else {
-        // Demo mode
+        // Demo mode — works instantly, no backend needed
         currentUser = { email, id: 'demo-' + Date.now() };
         localStorage.setItem('pixelforge_user', JSON.stringify(currentUser));
-        enterApp();
     }
+    enterApp();
 });
 
 signupForm.addEventListener('submit', async (e) => {
@@ -95,10 +152,12 @@ signupForm.addEventListener('submit', async (e) => {
         });
         if (error) {
             showAuthMessage(error.message, 'error');
-        } else {
-            showAuthMessage('✅ Check your email to confirm your account!', 'success');
+            btn.disabled = false;
+            return;
         }
+        showAuthMessage('✅ Check your email to confirm your account!', 'success');
     } else {
+        // Demo mode — instant signup, no email verification
         currentUser = { email, id: 'demo-' + Date.now() };
         localStorage.setItem('pixelforge_user', JSON.stringify(currentUser));
         enterApp();
@@ -114,7 +173,7 @@ async function signInWithGoogle() {
         });
         if (error) showAuthMessage(error.message, 'error');
     } else {
-        currentUser = { email: 'google@user.com', id: 'demo-google' };
+        currentUser = { email: 'google@user.com', id: 'demo-google-' + Date.now() };
         localStorage.setItem('pixelforge_user', JSON.stringify(currentUser));
         enterApp();
     }
@@ -149,14 +208,12 @@ function toggleUserMenu() {
     userMenu.classList.toggle('hidden');
 }
 
-// Close user menu when clicking outside
 document.addEventListener('click', (e) => {
     if (!e.target.closest('.sidebar-footer')) {
         userMenu.classList.add('hidden');
     }
 });
 
-// Check session on load
 async function checkSession() {
     const saved = localStorage.getItem('pixelforge_user');
     if (saved) {
@@ -190,7 +247,6 @@ function switchView(view) {
         document.getElementById('libraryView').classList.add('active');
     }
 
-    // Close sidebar on mobile
     if (window.innerWidth <= 768) {
         sidebar.classList.remove('open');
     }
@@ -205,41 +261,131 @@ function newChat() {
     chatMessages.classList.remove('active');
     chatMessages.innerHTML = '';
     promptInput.value = '';
+    chatHistory = [];
     switchView('chat');
 }
 
 function newNotebook() {
-    alert('Notebooks coming soon!');
+    alert('Notebooks coming soon! 🚀');
 }
 
-// ===== IMAGE GENERATION =====
+// ===== SMART INPUT DETECTION =====
+function isImagePrompt(text) {
+    const imageKeywords = /image|picture|photo|generate|create|draw|paint|make.*art|design|portrait|landscape|scene|character|logo|illustration|render|3d|anime|cartoon|realistic|fantasy|sci-fi|cyberpunk|abstract|watercolor|oil painting|sketch|concept art/;
+    return imageKeywords.test(text.toLowerCase());
+}
+
 function handleKeyDown(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        generateImage();
+        handleInput();
     }
 }
 
-async function generateImage() {
+async function handleInput() {
     const prompt = promptInput.value.trim();
-    if (!prompt || isGenerating) return;
-
-    isGenerating = true;
+    if (!prompt || isGenerating || isChatting) return;
 
     // Hide welcome, show chat
     welcomeScreen.style.display = 'none';
     chatMessages.classList.add('active');
 
-    // User message
-    const userMsg = document.createElement('div');
-    userMsg.className = 'message';
-    userMsg.innerHTML = `
-        <div class="message-avatar user">${currentUser ? (currentUser.email[0] || 'U').toUpperCase() : 'U'}</div>
-        <div class="message-body"><p>${escapeHtml(prompt)}</p></div>
-    `;
-    chatMessages.appendChild(userMsg);
+    // Add user message
+    addUserMessage(prompt);
 
-    // AI loading
+    // Decide: image or chat?
+    if (isImagePrompt(prompt)) {
+        await generateImage(prompt);
+    } else {
+        await sendChatMessage(prompt);
+    }
+
+    promptInput.value = '';
+}
+
+function addUserMessage(text) {
+    const msg = document.createElement('div');
+    msg.className = 'message';
+    msg.innerHTML = `
+        <div class="message-avatar user">${currentUser ? (currentUser.email[0] || 'U').toUpperCase() : 'U'}</div>
+        <div class="message-body"><p>${escapeHtml(text)}</p></div>
+    `;
+    chatMessages.appendChild(msg);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// ===== CHAT (with OpenRouter or demo fallback) =====
+async function sendChatMessage(prompt) {
+    isChatting = true;
+
+    // Add loading message
+    const aiMsg = document.createElement('div');
+    aiMsg.className = 'message';
+    aiMsg.id = 'chatResponse';
+    aiMsg.innerHTML = `
+        <div class="message-avatar ai">🔮</div>
+        <div class="message-body">
+            <div class="chat-loading">Thinking...</div>
+        </div>
+    `;
+    chatMessages.appendChild(aiMsg);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+
+    let responseText = '';
+
+    if (HAS_OPENROUTER) {
+        // Use OpenRouter for real AI chat
+        try {
+            const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + OPENROUTER_KEY,
+                    'Content-Type': 'application/json',
+                    'HTTP-Referer': window.location.href,
+                    'X-Title': 'PixelForge AI'
+                },
+                body: JSON.stringify({
+                    model: 'deepseek/deepseek-r1:free',
+                    messages: [
+                        { role: 'system', content: 'You are PixelForge AI, a creative assistant that helps users generate AI images and answers their questions. Be friendly, creative, and encouraging.' },
+                        ...chatHistory.map(h => ({ role: h.role, content: h.content })),
+                        { role: 'user', content: prompt }
+                    ]
+                })
+            });
+            const data = await res.json();
+            responseText = data.choices?.[0]?.message?.content || getDemoResponse(prompt);
+        } catch (e) {
+            console.log('OpenRouter failed, using demo mode');
+            responseText = getDemoResponse(prompt);
+        }
+    } else {
+        // Demo mode — instant response, no API needed
+        await delay(800); // Simulate thinking time
+        responseText = getDemoResponse(prompt);
+    }
+
+    // Update chat history
+    chatHistory.push({ role: 'user', content: prompt });
+    chatHistory.push({ role: 'assistant', content: responseText });
+    if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
+    localStorage.setItem('pixelforge_chat', JSON.stringify(chatHistory));
+
+    // Show response
+    const response = document.getElementById('chatResponse');
+    response.innerHTML = `
+        <div class="message-avatar ai">🔮</div>
+        <div class="message-body"><p>${escapeHtml(responseText)}</p></div>
+    `;
+
+    isChatting = false;
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// ===== IMAGE GENERATION (Pollinations — always free, no key) =====
+async function generateImage(prompt) {
+    isGenerating = true;
+
     const aiMsg = document.createElement('div');
     aiMsg.className = 'message';
     aiMsg.id = 'aiResponse';
@@ -253,12 +399,10 @@ async function generateImage() {
     chatMessages.appendChild(aiMsg);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 
-    // Generate with Pollinations (FREE)
     const encodedPrompt = encodeURIComponent(prompt);
     const seed = Math.floor(Math.random() * 100000);
     const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&seed=${seed}&nologo=true&enhance=true`;
 
-    // Preload
     const img = new Image();
     img.onload = () => {
         const response = document.getElementById('aiResponse');
@@ -273,7 +417,7 @@ async function generateImage() {
             </div>
         `;
 
-        // Save generation
+        // Save to gallery
         const gen = {
             id: Date.now(),
             prompt,
@@ -286,7 +430,6 @@ async function generateImage() {
         renderImages();
 
         isGenerating = false;
-        promptInput.value = '';
         chatMessages.scrollTop = chatMessages.scrollHeight;
     };
 
@@ -304,6 +447,7 @@ async function generateImage() {
     img.src = imageUrl;
 }
 
+// ===== GALLERY =====
 function renderImages() {
     const grid = document.getElementById('imagesGrid');
     const empty = document.getElementById('imagesEmpty');
@@ -351,14 +495,11 @@ function switchBilling(type, btn) {
     currentBilling = type;
     document.querySelectorAll('.billing-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-
-    // Update prices
     document.querySelectorAll('.plan-price .amount').forEach(el => {
         el.textContent = el.getAttribute('data-' + type);
     });
 }
 
-// Close modal on overlay click
 upgradeModal.addEventListener('click', (e) => {
     if (e.target === upgradeModal) hideUpgrade();
 });
@@ -375,12 +516,18 @@ function formatDate(isoString) {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 // ===== INIT =====
 renderImages();
 
-// Handle resize
 window.addEventListener('resize', () => {
     if (window.innerWidth > 768) {
         sidebar.classList.remove('open');
     }
 });
+
+console.log('🔮 PixelForge AI loaded!');
+console.log('Mode:', HAS_SUPABASE ? 'Supabase' : 'Demo', '|', HAS_OPENROUTER ? 'OpenRouter' : 'Demo Chat');
