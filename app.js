@@ -1,345 +1,386 @@
-// PixelForge AI — Create with AI
-var App = {
-    isGenerating: false,
-    currentModel: "v2",
-    currentRatio: "1:1",
-    currentStyle: "none",
-    currentQuality: "standard",
-    isPro: false,
-    generationsLeft: 10,
-    history: [],
+// ===== CONFIG =====
+const SUPABASE_URL = 'https://your-project.supabase.co';
+const SUPABASE_ANON_KEY = 'your-anon-key';
 
-    init: function() {
-        this.bindEvents();
-        this.updateGenerationsLeft();
-    },
-
-    bindEvents: function() {
-        var self = this;
-
-        // Sidebar navigation
-        document.querySelectorAll(".nav-item").forEach(function(item) {
-            item.addEventListener("click", function(e) {
-                e.preventDefault();
-                self.switchPage(this.dataset.section);
-            });
-        });
-
-        // New creation button
-        document.getElementById("newBtn").addEventListener("click", function() {
-            self.resetGenerate();
-            self.switchPage("generate");
-        });
-
-        // Mobile sidebar toggle
-        document.getElementById("sidebarToggle").addEventListener("click", function() {
-            document.getElementById("sidebar").classList.toggle("open");
-        });
-
-        // Upgrade modal
-        document.getElementById("upgradeBtn").addEventListener("click", function() {
-            self.openModal();
-        });
-        document.getElementById("closeModal").addEventListener("click", function() {
-            self.closeModal();
-        });
-        document.getElementById("subscribeBtn").addEventListener("click", function() {
-            self.upgradeToPro();
-        });
-
-        // Model selector
-        document.getElementById("modelBtn").addEventListener("click", function(e) {
-            e.stopPropagation();
-            document.getElementById("modelDropdown").classList.toggle("hidden");
-        });
-
-        document.querySelectorAll(".model-option").forEach(function(opt) {
-            opt.addEventListener("click", function() {
-                if (this.classList.contains("pro-only") && !self.isPro) {
-                    self.toast("Upgrade to Pro to use this model", "error");
-                    return;
-                }
-                self.selectModel(this.dataset.model, this);
-            });
-        });
-
-        // Close dropdown when clicking outside
-        document.addEventListener("click", function() {
-            document.getElementById("modelDropdown").classList.add("hidden");
-        });
-
-        // Generate button
-        document.getElementById("generateBtn").addEventListener("click", function() {
-            self.generateImage();
-        });
-
-        // Prompt input auto-resize
-        var promptInput = document.getElementById("promptInput");
-        promptInput.addEventListener("input", function() {
-            this.style.height = "auto";
-            this.style.height = Math.min(this.scrollHeight, 120) + "px";
-        });
-
-        // Enter key to generate
-        promptInput.addEventListener("keydown", function(e) {
-            if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                self.generateImage();
-            }
-        });
-
-        // Aspect ratio buttons
-        document.querySelectorAll(".ratio-btn").forEach(function(btn) {
-            btn.addEventListener("click", function() {
-                if (this.classList.contains("pro-only") && !self.isPro) {
-                    self.toast("Upgrade to Pro for this ratio", "error");
-                    return;
-                }
-                document.querySelectorAll(".ratio-btn").forEach(function(b) { b.classList.remove("active"); });
-                this.classList.add("active");
-                self.currentRatio = this.dataset.ratio;
-            });
-        });
-
-        // Style select
-        document.getElementById("styleSelect").addEventListener("change", function() {
-            self.currentStyle = this.value;
-        });
-
-        // Quality buttons
-        document.querySelectorAll(".q-btn").forEach(function(btn) {
-            btn.addEventListener("click", function() {
-                if (this.classList.contains("pro-only") && !self.isPro) {
-                    self.toast("Upgrade to Pro for HD quality", "error");
-                    return;
-                }
-                document.querySelectorAll(".q-btn").forEach(function(b) { b.classList.remove("active"); });
-                this.classList.add("active");
-                self.currentQuality = this.dataset.quality;
-            });
-        });
-
-        // Upload button
-        document.getElementById("uploadBtn").addEventListener("click", function() {
-            document.getElementById("fileInput").click();
-        });
-
-        document.getElementById("fileInput").addEventListener("change", function(e) {
-            if (e.target.files && e.target.files[0]) {
-                self.toast("Reference image uploaded", "success");
-            }
-        });
-
-        // Recent items
-        document.querySelectorAll(".recent-item").forEach(function(item) {
-            item.addEventListener("click", function() {
-                document.getElementById("promptInput").value = this.dataset.prompt;
-                self.switchPage("generate");
-            });
-        });
-
-        // Result actions
-        document.getElementById("downloadBtn").addEventListener("click", function() {
-            self.toast("Image downloaded", "success");
-        });
-        document.getElementById("shareBtn").addEventListener("click", function() {
-            self.toast("Link copied to clipboard", "success");
-        });
-        document.getElementById("variationsBtn").addEventListener("click", function() {
-            self.toast("Creating variations...", "info");
-        });
-    },
-
-    switchPage: function(page) {
-        // Update nav
-        document.querySelectorAll(".nav-item").forEach(function(item) {
-            item.classList.toggle("active", item.dataset.section === page);
-        });
-
-        // Show page
-        document.querySelectorAll(".page").forEach(function(p) { p.classList.remove("active"); });
-        document.getElementById("page-" + page).classList.add("active");
-
-        // Close mobile sidebar
-        document.getElementById("sidebar").classList.remove("open");
-    },
-
-    selectModel: function(model, element) {
-        this.currentModel = model;
-        document.querySelectorAll(".model-option").forEach(function(o) { o.classList.remove("active"); });
-        element.classList.add("active");
-
-        var modelNames = { v2: "PixelForge V2", v1: "PixelForge V1", hd: "PixelForge HD" };
-        document.getElementById("currentModel").textContent = modelNames[model] || "PixelForge V2";
-        document.getElementById("modelDropdown").classList.add("hidden");
-    },
-
-    generateImage: function() {
-        if (this.isGenerating) return;
-
-        var prompt = document.getElementById("promptInput").value.trim();
-        if (!prompt) {
-            this.toast("Please enter a prompt", "error");
-            return;
-        }
-
-        if (!this.isPro && this.generationsLeft <= 0) {
-            this.toast("Daily limit reached. Upgrade to Pro!", "error");
-            this.openModal();
-            return;
-        }
-
-        this.isGenerating = true;
-        document.getElementById("generateBtn").disabled = true;
-        document.getElementById("emptyState").classList.add("hidden");
-        document.getElementById("imageResult").classList.add("hidden");
-        document.getElementById("generatingState").classList.remove("hidden");
-
-        // Simulate generation progress
-        var progress = 0;
-        var progressBar = document.getElementById("genProgress");
-        var generatingText = document.getElementById("generatingText");
-        var texts = [
-            "Initializing neural network",
-            "Analyzing prompt semantics",
-            "Generating base composition",
-            "Applying style filters",
-            "Refining details",
-            "Finalizing image"
-        ];
-
-        var self = this;
-        var interval = setInterval(function() {
-            progress += Math.random() * 15 + 5;
-            if (progress > 100) progress = 100;
-            progressBar.style.width = progress + "%";
-
-            var textIndex = Math.min(Math.floor(progress / 20), texts.length - 1);
-            generatingText.textContent = texts[textIndex];
-
-            if (progress >= 100) {
-                clearInterval(interval);
-                setTimeout(function() {
-                    self.showResult(prompt);
-                }, 500);
-            }
-        }, 400);
-    },
-
-    showResult: function(prompt) {
-        this.isGenerating = false;
-        document.getElementById("generateBtn").disabled = false;
-        document.getElementById("generatingState").classList.add("hidden");
-        document.getElementById("imageResult").classList.remove("hidden");
-
-        // Pick a random image based on style
-        var images = {
-            none: [
-                "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=700&h=700&fit=crop",
-                "https://images.unsplash.com/photo-1633218388467-539651dcf81a?w=700&h=700&fit=crop",
-                "https://images.unsplash.com/photo-1614850523459-c2f4c699c52e?w=700&h=700&fit=crop"
-            ],
-            photorealistic: ["https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=700&h=700&fit=crop"],
-            anime: ["https://images.unsplash.com/photo-1578632767115-351597cf2477?w=700&h=700&fit=crop"],
-            "digital-art": ["https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=700&h=700&fit=crop"],
-            "oil-painting": ["https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=700&h=700&fit=crop"],
-            "3d-render": ["https://images.unsplash.com/photo-1618005198919-d3d4b5a92ead?w=700&h=700&fit=crop"],
-            sketch: ["https://images.unsplash.com/photo-1615184697985-c9bde1b07da7?w=700&h=700&fit=crop"],
-            cinematic: ["https://images.unsplash.com/photo-1515630278258-407f66498911?w=700&h=700&fit=crop"]
-        };
-
-        var styleImages = images[this.currentStyle] || images.none;
-        var randomImage = styleImages[Math.floor(Math.random() * styleImages.length)];
-
-        document.getElementById("generatedImage").src = randomImage;
-        document.getElementById("resultPrompt").textContent = prompt;
-        document.getElementById("resultModel").textContent = document.getElementById("currentModel").textContent;
-        document.getElementById("resultSize").textContent = this.currentRatio;
-
-        // Update generations left
-        if (!this.isPro) {
-            this.generationsLeft--;
-            this.updateGenerationsLeft();
-        }
-
-        // Add to history
-        this.addToHistory(prompt, randomImage);
-
-        this.toast("Image generated successfully!", "success");
-    },
-
-    resetGenerate: function() {
-        document.getElementById("promptInput").value = "";
-        document.getElementById("emptyState").classList.remove("hidden");
-        document.getElementById("imageResult").classList.add("hidden");
-        document.getElementById("generatingState").classList.add("hidden");
-        document.getElementById("genProgress").style.width = "0%";
-    },
-
-    updateGenerationsLeft: function() {
-        var userPlan = document.querySelector(".user-plan");
-        if (userPlan && !this.isPro) {
-            userPlan.textContent = this.generationsLeft + " left today";
-        }
-    },
-
-    addToHistory: function(prompt, image) {
-        var recentList = document.getElementById("recentList");
-        var newItem = document.createElement("div");
-        newItem.className = "recent-item";
-        newItem.dataset.prompt = prompt;
-        newItem.innerHTML = '<img src="' + image + '" alt=""><span>' + prompt.substring(0, 30) + (prompt.length > 30 ? "..." : "") + "</span>";
-
-        var self = this;
-        newItem.addEventListener("click", function() {
-            document.getElementById("promptInput").value = this.dataset.prompt;
-            self.switchPage("generate");
-        });
-
-        recentList.insertBefore(newItem, recentList.firstChild);
-
-        // Keep only 5 recent items
-        while (recentList.children.length > 5) {
-            recentList.removeChild(recentList.lastChild);
-        }
-    },
-
-    openModal: function() {
-        document.getElementById("upgradeModal").classList.remove("hidden");
-    },
-
-    closeModal: function() {
-        document.getElementById("upgradeModal").classList.add("hidden");
-    },
-
-    upgradeToPro: function() {
-        this.isPro = true;
-        this.closeModal();
-
-        // Update UI
-        document.querySelector(".user-plan").textContent = "Pro Plan";
-        document.getElementById("upgradeBtn").style.display = "none";
-
-        // Unlock pro features
-        document.querySelectorAll(".pro-only").forEach(function(el) {
-            el.style.opacity = "1";
-            el.style.pointerEvents = "auto";
-        });
-
-        this.toast("Welcome to PixelForge Pro!", "success");
-    },
-
-    toast: function(message, type) {
-        type = type || "info";
-        var icon = type === "success" ? "check-circle" : type === "error" ? "exclamation-circle" : "info-circle";
-        var toast = document.createElement("div");
-        toast.className = "toast " + type;
-        toast.innerHTML = '<i class="fas fa-' + icon + '"></i><span>' + message + '</span>';
-        document.getElementById("toastContainer").appendChild(toast);
-        setTimeout(function() { toast.remove(); }, 3000);
+let supabase = null;
+try {
+    if (window.supabase) {
+        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     }
-};
+} catch (e) {
+    console.log('Supabase not configured - running in demo mode');
+}
 
-document.addEventListener("DOMContentLoaded", function() {
-    App.init();
+// ===== STATE =====
+let currentUser = null;
+let isGenerating = false;
+let generations = JSON.parse(localStorage.getItem('pixelforge_generations') || '[]');
+let currentBilling = 'monthly';
+
+// ===== DOM ELEMENTS =====
+const authOverlay = document.getElementById('authOverlay');
+const loginForm = document.getElementById('loginForm');
+const signupForm = document.getElementById('signupForm');
+const authMessage = document.getElementById('authMessage');
+const mainApp = document.getElementById('mainApp');
+const sidebar = document.getElementById('sidebar');
+const promptInput = document.getElementById('promptInput');
+const chatMessages = document.getElementById('chatMessages');
+const welcomeScreen = document.getElementById('welcomeScreen');
+const upgradeModal = document.getElementById('upgradeModal');
+const userMenu = document.getElementById('userMenu');
+
+// ===== AUTH FUNCTIONS =====
+function switchAuthTab(tab, btn) {
+    document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+
+    if (tab === 'login') {
+        loginForm.classList.remove('hidden');
+        signupForm.classList.add('hidden');
+    } else {
+        loginForm.classList.add('hidden');
+        signupForm.classList.remove('hidden');
+    }
+    hideAuthMessage();
+}
+
+function showAuthMessage(text, type) {
+    authMessage.textContent = text;
+    authMessage.className = 'auth-message ' + type;
+}
+
+function hideAuthMessage() {
+    authMessage.className = 'auth-message';
+    authMessage.style.display = 'none';
+}
+
+loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('loginBtn');
+    btn.disabled = true;
+
+    const email = document.getElementById('loginEmail').value;
+    const password = document.getElementById('loginPassword').value;
+
+    if (supabase) {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) {
+            showAuthMessage(error.message, 'error');
+            btn.disabled = false;
+        } else {
+            currentUser = data.user;
+            enterApp();
+        }
+    } else {
+        // Demo mode
+        currentUser = { email, id: 'demo-' + Date.now() };
+        localStorage.setItem('pixelforge_user', JSON.stringify(currentUser));
+        enterApp();
+    }
+});
+
+signupForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('signupBtn');
+    btn.disabled = true;
+
+    const email = document.getElementById('signupEmail').value;
+    const password = document.getElementById('signupPassword').value;
+
+    if (supabase) {
+        const { data, error } = await supabase.auth.signUp({
+            email, password,
+            options: { emailRedirectTo: window.location.href }
+        });
+        if (error) {
+            showAuthMessage(error.message, 'error');
+        } else {
+            showAuthMessage('✅ Check your email to confirm your account!', 'success');
+        }
+    } else {
+        currentUser = { email, id: 'demo-' + Date.now() };
+        localStorage.setItem('pixelforge_user', JSON.stringify(currentUser));
+        enterApp();
+    }
+    btn.disabled = false;
+});
+
+async function signInWithGoogle() {
+    if (supabase) {
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: { redirectTo: window.location.href }
+        });
+        if (error) showAuthMessage(error.message, 'error');
+    } else {
+        currentUser = { email: 'google@user.com', id: 'demo-google' };
+        localStorage.setItem('pixelforge_user', JSON.stringify(currentUser));
+        enterApp();
+    }
+}
+
+async function logout() {
+    if (supabase) await supabase.auth.signOut();
+    localStorage.removeItem('pixelforge_user');
+    currentUser = null;
+    userMenu.classList.add('hidden');
+    authOverlay.classList.remove('hidden');
+    loginForm.reset();
+    signupForm.reset();
+    hideAuthMessage();
+}
+
+function enterApp() {
+    authOverlay.classList.add('hidden');
+    updateUserUI();
+    renderImages();
+}
+
+function updateUserUI() {
+    if (!currentUser) return;
+    const email = currentUser.email || 'User';
+    const initial = email[0].toUpperCase();
+    document.getElementById('userAvatar').textContent = initial;
+    document.getElementById('userName').textContent = email.split('@')[0];
+}
+
+function toggleUserMenu() {
+    userMenu.classList.toggle('hidden');
+}
+
+// Close user menu when clicking outside
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.sidebar-footer')) {
+        userMenu.classList.add('hidden');
+    }
+});
+
+// Check session on load
+async function checkSession() {
+    const saved = localStorage.getItem('pixelforge_user');
+    if (saved) {
+        currentUser = JSON.parse(saved);
+        enterApp();
+        return;
+    }
+    if (supabase) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+            currentUser = session.user;
+            enterApp();
+        }
+    }
+}
+checkSession();
+
+// ===== NAVIGATION =====
+function switchView(view) {
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+
+    if (view === 'chat') {
+        document.getElementById('navChat').classList.add('active');
+        document.getElementById('chatView').classList.add('active');
+    } else if (view === 'images') {
+        document.getElementById('navImages').classList.add('active');
+        document.getElementById('imagesView').classList.add('active');
+    } else if (view === 'library') {
+        document.getElementById('navLibrary').classList.add('active');
+        document.getElementById('libraryView').classList.add('active');
+    }
+
+    // Close sidebar on mobile
+    if (window.innerWidth <= 768) {
+        sidebar.classList.remove('open');
+    }
+}
+
+function toggleSidebar() {
+    sidebar.classList.toggle('open');
+}
+
+function newChat() {
+    welcomeScreen.style.display = 'block';
+    chatMessages.classList.remove('active');
+    chatMessages.innerHTML = '';
+    promptInput.value = '';
+    switchView('chat');
+}
+
+function newNotebook() {
+    alert('Notebooks coming soon!');
+}
+
+// ===== IMAGE GENERATION =====
+function handleKeyDown(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        generateImage();
+    }
+}
+
+async function generateImage() {
+    const prompt = promptInput.value.trim();
+    if (!prompt || isGenerating) return;
+
+    isGenerating = true;
+
+    // Hide welcome, show chat
+    welcomeScreen.style.display = 'none';
+    chatMessages.classList.add('active');
+
+    // User message
+    const userMsg = document.createElement('div');
+    userMsg.className = 'message';
+    userMsg.innerHTML = `
+        <div class="message-avatar user">${currentUser ? (currentUser.email[0] || 'U').toUpperCase() : 'U'}</div>
+        <div class="message-body"><p>${escapeHtml(prompt)}</p></div>
+    `;
+    chatMessages.appendChild(userMsg);
+
+    // AI loading
+    const aiMsg = document.createElement('div');
+    aiMsg.className = 'message';
+    aiMsg.id = 'aiResponse';
+    aiMsg.innerHTML = `
+        <div class="message-avatar ai">🔮</div>
+        <div class="message-body">
+            <p>Creating your masterpiece...</p>
+            <div class="image-loading">✨ Generating image...</div>
+        </div>
+    `;
+    chatMessages.appendChild(aiMsg);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+
+    // Generate with Pollinations (FREE)
+    const encodedPrompt = encodeURIComponent(prompt);
+    const seed = Math.floor(Math.random() * 100000);
+    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&seed=${seed}&nologo=true&enhance=true`;
+
+    // Preload
+    const img = new Image();
+    img.onload = () => {
+        const response = document.getElementById('aiResponse');
+        response.innerHTML = `
+            <div class="message-avatar ai">🔮</div>
+            <div class="message-body">
+                <p>Here's what I created for you:</p>
+                <div class="message-image">
+                    <img src="${imageUrl}" alt="${escapeHtml(prompt)}" onclick="downloadImage('${imageUrl}', '${escapeHtml(prompt)}')">
+                </div>
+                <p style="margin-top:8px;font-size:12px;color:var(--text-tertiary);">Click image to download</p>
+            </div>
+        `;
+
+        // Save generation
+        const gen = {
+            id: Date.now(),
+            prompt,
+            imageUrl,
+            seed,
+            timestamp: new Date().toISOString()
+        };
+        generations.unshift(gen);
+        localStorage.setItem('pixelforge_generations', JSON.stringify(generations));
+        renderImages();
+
+        isGenerating = false;
+        promptInput.value = '';
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    };
+
+    img.onerror = () => {
+        const response = document.getElementById('aiResponse');
+        response.innerHTML = `
+            <div class="message-avatar ai">🔮</div>
+            <div class="message-body">
+                <p style="color:#d93025;">Oops! Something went wrong. Please try again.</p>
+            </div>
+        `;
+        isGenerating = false;
+    };
+
+    img.src = imageUrl;
+}
+
+function renderImages() {
+    const grid = document.getElementById('imagesGrid');
+    const empty = document.getElementById('imagesEmpty');
+
+    if (generations.length === 0) {
+        grid.innerHTML = '';
+        empty.style.display = 'flex';
+        return;
+    }
+
+    empty.style.display = 'none';
+    grid.innerHTML = generations.map(g => `
+        <div class="image-card" onclick="downloadImage('${g.imageUrl}', '${escapeHtml(g.prompt)}')">
+            <img src="${g.imageUrl}" alt="${escapeHtml(g.prompt)}" loading="lazy">
+            <div class="image-card-info">
+                <p>${escapeHtml(g.prompt)}</p>
+                <div class="date">${formatDate(g.timestamp)}</div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function downloadImage(url, filename) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `pixelforge-${filename.substring(0, 30).replace(/[^a-z0-9]/gi, '-')}.png`;
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+
+// ===== UPGRADE MODAL =====
+function showUpgrade() {
+    upgradeModal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+
+function hideUpgrade() {
+    upgradeModal.classList.add('hidden');
+    document.body.style.overflow = '';
+}
+
+function switchBilling(type, btn) {
+    currentBilling = type;
+    document.querySelectorAll('.billing-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    // Update prices
+    document.querySelectorAll('.plan-price .amount').forEach(el => {
+        el.textContent = el.getAttribute('data-' + type);
+    });
+}
+
+// Close modal on overlay click
+upgradeModal.addEventListener('click', (e) => {
+    if (e.target === upgradeModal) hideUpgrade();
+});
+
+// ===== UTILITIES =====
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function formatDate(isoString) {
+    const date = new Date(isoString);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// ===== INIT =====
+renderImages();
+
+// Handle resize
+window.addEventListener('resize', () => {
+    if (window.innerWidth > 768) {
+        sidebar.classList.remove('open');
+    }
 });
