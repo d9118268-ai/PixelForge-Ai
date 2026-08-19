@@ -228,18 +228,46 @@ document.addEventListener('click', function(e) {
 });
 
 function checkSession() {
+    // If Supabase is connected, check for real session first
     if (supabase) {
         supabase.auth.getSession().then(function(result) {
             if (result.data.session) {
                 currentUser = result.data.session.user;
                 enterApp();
+                return;
+            }
+            // No Supabase session - check if old demo user exists
+            var saved = localStorage.getItem('pixelforge_user');
+            if (saved) {
+                var user = JSON.parse(saved);
+                // If it's a demo user and Supabase is available, force logout
+                if (user.id && user.id.startsWith('demo')) {
+                    console.log('Demo user found with Supabase available - clearing for real auth');
+                    localStorage.removeItem('pixelforge_user');
+                    localStorage.removeItem('pixelforge_chat');
+                    showLoginScreen();
+                } else {
+                    currentUser = user;
+                    enterApp();
+                }
+            } else {
+                showLoginScreen();
             }
         });
+    } else {
+        // No Supabase - use demo mode
+        var saved = localStorage.getItem('pixelforge_user');
+        if (saved) {
+            try { currentUser = JSON.parse(saved); enterApp(); } catch(e) { localStorage.removeItem('pixelforge_user'); showLoginScreen(); }
+        } else {
+            showLoginScreen();
+        }
     }
-    var saved = localStorage.getItem('pixelforge_user');
-    if (saved) {
-        try { currentUser = JSON.parse(saved); enterApp(); } catch(e) { localStorage.removeItem('pixelforge_user'); }
-    }
+}
+
+function showLoginScreen() {
+    document.getElementById('authOverlay').classList.remove('hidden');
+    document.getElementById('authOverlay').style.display = 'flex';
 }
 
 // ===== SUPABASE SYNC =====
@@ -411,10 +439,10 @@ async function sendChatMessage(prompt) {
             var data = await res.json();
             responseText = data.choices?.[0]?.message?.content || getDemoResponse(prompt);
         } catch (e) {
-            responseText = await tryPollinationsText(prompt);
+            responseText = await tryFreeAIChat(prompt);
         }
     } else {
-        responseText = await tryPollinationsText(prompt);
+        responseText = await tryFreeAIChat(prompt);
     }
 
     chatHistory.push({ role: 'user', content: prompt });
@@ -429,17 +457,35 @@ async function sendChatMessage(prompt) {
     document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
 }
 
-// Pollinations TEXT API (free!)
-async function tryPollinationsText(prompt) {
+// Hugging Face Inference API (free tier - no key needed for basic use)
+// Fallback chain: OpenRouter → Hugging Face → Demo mode
+async function tryFreeAIChat(prompt) {
+    // Try Hugging Face first (free, no key for basic models)
     try {
-        var encodedPrompt = encodeURIComponent(prompt);
-        var res = await fetch('https://text.pollinations.ai/' + encodedPrompt + '?seed=' + Math.floor(Math.random() * 1000));
-        var text = await res.text();
-        if (text && text.length > 10) return text;
-        return getDemoResponse(prompt);
+        var res = await fetch('https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                inputs: '<s>[INST] You are PixelForge AI, a helpful creative assistant. ' + prompt + ' [/INST]',
+                parameters: { max_new_tokens: 250, temperature: 0.7 }
+            })
+        });
+        if (res.ok) {
+            var data = await res.json();
+            var text = data[0]?.generated_text || '';
+            // Extract only the response part after [/INST]
+            var parts = text.split('[/INST]');
+            if (parts.length > 1) {
+                var response = parts[1].trim();
+                if (response.length > 10) return response;
+            }
+        }
     } catch (e) {
-        return getDemoResponse(prompt);
+        console.log('Hugging Face failed:', e.message);
     }
+
+    // Fallback to demo mode
+    return getDemoResponse(prompt);
 }
 
 // ===== IMAGE GENERATION (Pollinations - free!) =====
@@ -565,3 +611,25 @@ window.addEventListener('resize', function() {
 console.log('PixelForge AI loaded!');
 console.log('Supabase:', HAS_SUPABASE ? 'Connected' : 'Demo mode');
 console.log('OpenRouter:', HAS_OPENROUTER ? 'Connected' : 'Using Pollinations text or Demo');
+
+
+function switchAccount() {
+    // Clear everything and show login screen
+    if (supabase) supabase.auth.signOut();
+    localStorage.removeItem('pixelforge_user');
+    localStorage.removeItem('pixelforge_chat');
+    localStorage.removeItem('pixelforge_generations');
+    currentUser = null;
+    chatHistory = [];
+    generations = [];
+    document.getElementById('userMenu').style.display = 'none';
+    document.getElementById('authOverlay').classList.remove('hidden');
+    document.getElementById('authOverlay').style.display = 'flex';
+    document.getElementById('loginEmail').value = '';
+    document.getElementById('loginPassword').value = '';
+    document.getElementById('signupEmail').value = '';
+    document.getElementById('signupPassword').value = '';
+    hideAuthMessage();
+    showLogin();
+    renderImages();
+}
