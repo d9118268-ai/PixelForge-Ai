@@ -6,6 +6,13 @@ var isChatting = false;
 var generations = JSON.parse(localStorage.getItem('pixelforge_generations') || '[]');
 var chatHistory = JSON.parse(localStorage.getItem('pixelforge_chat') || '[]');
 var currentBilling = 'monthly';
+var isDarkMode = localStorage.getItem('pixelforge_darkmode') === 'true';
+
+// Apply dark mode on load
+if (isDarkMode) {
+    document.body.classList.add('dark-mode');
+    document.getElementById('darkModeToggle').textContent = '☀️';
+}
 
 var DEMO_RESPONSES = {
     greetings: [
@@ -51,6 +58,14 @@ function getDemoResponse(input) {
         return DEMO_RESPONSES.creative[Math.floor(Math.random() * DEMO_RESPONSES.creative.length)];
     }
     return DEMO_RESPONSES.fallback[Math.floor(Math.random() * DEMO_RESPONSES.fallback.length)];
+}
+
+// ===== DARK MODE =====
+function toggleDarkMode() {
+    isDarkMode = !isDarkMode;
+    document.body.classList.toggle('dark-mode');
+    localStorage.setItem('pixelforge_darkmode', isDarkMode);
+    document.getElementById('darkModeToggle').textContent = isDarkMode ? '☀️' : '🌙';
 }
 
 // ===== AUTH =====
@@ -195,6 +210,93 @@ function checkSession() {
     }
 }
 
+// ===== EXPORT FUNCTIONS =====
+function showExportModal() {
+    document.getElementById('exportModal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    document.getElementById('userMenu').style.display = 'none';
+}
+
+function hideExportModal() {
+    document.getElementById('exportModal').style.display = 'none';
+    document.body.style.overflow = '';
+}
+
+function exportAsText() {
+    var text = 'PixelForge AI - Chat Export\n';
+    text += '========================\n\n';
+    text += 'Date: ' + new Date().toLocaleString() + '\n\n';
+
+    for (var i = 0; i < chatHistory.length; i++) {
+        var msg = chatHistory[i];
+        var role = msg.role === 'user' ? 'You' : 'PixelForge';
+        text += role + ':\n' + msg.content + '\n\n';
+    }
+
+    downloadFile(text, 'pixelforge-chat.txt', 'text/plain');
+    hideExportModal();
+}
+
+function exportAsJSON() {
+    var data = {
+        app: 'PixelForge AI',
+        exportedAt: new Date().toISOString(),
+        user: currentUser ? currentUser.email : 'anonymous',
+        messages: chatHistory
+    };
+    downloadFile(JSON.stringify(data, null, 2), 'pixelforge-chat.json', 'application/json');
+    hideExportModal();
+}
+
+function exportAsMarkdown() {
+    var md = '# PixelForge AI - Chat Export\n\n';
+    md += '**Date:** ' + new Date().toLocaleString() + '\n\n';
+    md += '---\n\n';
+
+    for (var i = 0; i < chatHistory.length; i++) {
+        var msg = chatHistory[i];
+        var role = msg.role === 'user' ? 'You' : 'PixelForge';
+        md += '## ' + role + '\n\n';
+        md += msg.content + '\n\n';
+        md += '---\n\n';
+    }
+
+    downloadFile(md, 'pixelforge-chat.md', 'text/markdown');
+    hideExportModal();
+}
+
+function copyToClipboard() {
+    var text = '';
+    for (var i = 0; i < chatHistory.length; i++) {
+        var msg = chatHistory[i];
+        var role = msg.role === 'user' ? 'You' : 'PixelForge';
+        text += role + ': ' + msg.content + '\n\n';
+    }
+
+    navigator.clipboard.writeText(text).then(function() {
+        alert('Chat copied to clipboard!');
+        hideExportModal();
+    }).catch(function() {
+        alert('Could not copy to clipboard. Try exporting as a file instead.');
+    });
+}
+
+function downloadFile(content, filename, type) {
+    var blob = new Blob([content], { type: type });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+document.getElementById('exportModal').addEventListener('click', function(e) {
+    if (e.target === document.getElementById('exportModal')) hideExportModal();
+});
+
 // ===== NAVIGATION =====
 function switchView(view) {
     document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
@@ -278,7 +380,7 @@ function sendChatMessage(prompt) {
     var aiMsg = document.createElement('div');
     aiMsg.className = 'message';
     aiMsg.id = 'chatResponse';
-    aiMsg.innerHTML = '<div class="message-avatar ai">🔮</div><div class="message-body"><div class="chat-loading">Thinking...</div></div>';
+    aiMsg.innerHTML = '<div class="message-avatar ai">🔮</div><div class="message-body"><div class="typing-dots"><span></span><span></span><span></span></div></div>';
     document.getElementById('chatMessages').appendChild(aiMsg);
     document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
 
