@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PixelForge AI — Create with AI</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<base target="_blank">
+</head>
+<body>
+    <div class="app">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <div class="logo-icon">
+                        <i class="fas fa-cube"></i>
+                    </div>
+                    <span class="logo-text">PixelForge</span>
+                </div>
+            </div>
+
+            <button class="new-btn" id="newBtn">
+                <i class="fas fa-plus"></i>
+                <span>New Creation</span>
+            </button>
+
+            <div class="sidebar-section">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" placeholder="Search history..." id="searchInput">
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item active" data-section="generate">
+                    <i class="fas fa-wand-magic-sparkles"></i>
+                    <span>Generate</span>
+                </a>
+                <a href="#" class="nav-item" data-section="library">
+                    <i class="fas fa-images"></i>
+                    <span>My Images</span>
+                </a>
+                <a href="#" class="nav-item" data-section="history">
+                    <i class="fas fa-clock-rotate-left"></i>
+                    <span>Recent</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-section">
+                <h4 class="section-title">Recent Generations</h4>
+                <div class="recent-list" id="recentList">
+                    <div class="recent-item" data-prompt="A cyberpunk city at night with neon lights">
+                        <img src="https://images.unsplash.com/photo-1515630278258-407f66498911?w=100&h=100&fit=crop" alt="">
+                        <span>Cyberpunk city</span>
+                    </div>
+                    <div class="recent-item" data-prompt="A serene mountain landscape at sunrise">
+                        <img src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=100&h=100&fit=crop" alt="">
+                        <span>Mountain sunrise</span>
+                    </div>
+                    <div class="recent-item" data-prompt="An abstract geometric pattern in purple and gold">
+                        <img src="https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=100&h=100&fit=crop" alt="">
+                        <span>Abstract pattern</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="user-avatar">JD</div>
+                    <div class="user-details">
+                        <span class="user-name">John Doe</span>
+                        <span class="user-plan">Free Plan</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main">
+            <!-- Top Bar -->
+            <header class="top-bar">
+                <button class="sidebar-toggle" id="sidebarToggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <div class="top-actions">
+                    <button class="upgrade-btn" id="upgradeBtn">
+                        <i class="fas fa-gem"></i>
+                        <span>Upgrade to Pro</span>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Generate Page -->
+            <section class="page active" id="page-generate">
+                <div class="generate-area">
+                    <!-- Empty State / Result Area -->
+                    <div class="result-area" id="resultArea">
+                        <div class="empty-state" id="emptyState">
+                            <div class="empty-icon">
+                                <i class="fas fa-wand-magic-sparkles"></i>
+                            </div>
+                            <h2>What will you create today?</h2>
+                            <p>Describe your vision and let AI bring it to life</p>
+                        </div>
+                        <div class="image-result hidden" id="imageResult">
+                            <div class="result-image-container">
+                                <img id="generatedImage" src="" alt="Generated image">
+                                <div class="result-overlay">
+                                    <button class="overlay-btn" id="downloadBtn" title="Download">
+                                        <i class="fas fa-download"></i>
+                                    </button>
+                                    <button class="overlay-btn" id="shareBtn" title="Share">
+                                        <i class="fas fa-share-nodes"></i>
+                                    </button>
+                                    <button class="overlay-btn" id="variationsBtn" title="Create Variations">
+                                        <i class="fas fa-clone"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="result-meta">
+                                <p class="result-prompt" id="resultPrompt"></p>
+                                <div class="result-tags">
+                                    <span class="tag" id="resultModel"></span>
+                                    <span class="tag" id="resultSize"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="generating-state hidden" id="generatingState">
+                            <div class="generating-animation">
+                                <div class="sparkle-grid">
+                                    <div class="sparkle"></div>
+                                    <div class="sparkle"></div>
+                                    <div class="sparkle"></div>
+                                    <div class="sparkle"></div>
+                                    <div class="sparkle"></div>
+                                    <div class="sparkle"></div>
+                                    <div class="sparkle"></div>
+                                    <div class="sparkle"></div>
+                                    <div class="sparkle"></div>
+                                </div>
+                            </div>
+                            <h3>Crafting your masterpiece...</h3>
+                            <p id="generatingText">Initializing neural network</p>
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="genProgress"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Prompt Controls -->
+                    <div class="prompt-controls">
+                        <div class="model-selector">
+                            <button class="model-btn" id="modelBtn">
+                                <i class="fas fa-microchip"></i>
+                                <span id="currentModel">PixelForge V2</span>
+                                <i class="fas fa-chevron-down"></i>
+                            </button>
+                            <div class="model-dropdown hidden" id="modelDropdown">
+                                <div class="model-option active" data-model="v2">
+                                    <i class="fas fa-star"></i>
+                                    <div>
+                                        <strong>PixelForge V2</strong>
+                                        <span>Best quality & detail</span>
+                                    </div>
+                                </div>
+                                <div class="model-option" data-model="v1">
+                                    <i class="fas fa-bolt"></i>
+                                    <div>
+                                        <strong>PixelForge V1</strong>
+                                        <span>Faster generation</span>
+                                    </div>
+                                </div>
+                                <div class="model-option pro-only" data-model="hd">
+                                    <i class="fas fa-gem"></i>
+                                    <div>
+                                        <strong>PixelForge HD</strong>
+                                        <span>Ultra high resolution</span>
+                                    </div>
+                                    <span class="pro-badge">PRO</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="prompt-box">
+                            <button class="upload-btn" id="uploadBtn" title="Upload reference image">
+                                <i class="fas fa-image"></i>
+                            </button>
+                            <input type="file" id="fileInput" accept="image/*" hidden>
+                            <textarea 
+                                id="promptInput" 
+                                placeholder="Describe what you want to create... (e.g., A futuristic city floating in the clouds, cyberpunk style, neon lights, highly detailed)"
+                                rows="1"
+                            ></textarea>
+                            <button class="generate-btn" id="generateBtn">
+                                <i class="fas fa-wand-magic-sparkles"></i>
+                                <span>Generate</span>
+                            </button>
+                        </div>
+
+                        <div class="prompt-options">
+                            <div class="option-group">
+                                <label>Aspect Ratio</label>
+                                <div class="ratio-buttons">
+                                    <button class="ratio-btn active" data-ratio="1:1">
+                                        <i class="fas fa-square"></i>
+                                        <span>1:1</span>
+                                    </button>
+                                    <button class="ratio-btn" data-ratio="16:9">
+                                        <i class="fas fa-rectangle-wide"></i>
+                                        <span>16:9</span>
+                                    </button>
+                                    <button class="ratio-btn" data-ratio="9:16">
+                                        <i class="fas fa-rectangle-vertical"></i>
+                                        <span>9:16</span>
+                                    </button>
+                                    <button class="ratio-btn pro-only" data-ratio="21:9">
+                                        <i class="fas fa-panorama"></i>
+                                        <span>21:9</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="option-group">
+                                <label>Style</label>
+                                <select class="style-select" id="styleSelect">
+                                    <option value="none">No Style</option>
+                                    <option value="photorealistic">Photorealistic</option>
+                                    <option value="anime">Anime</option>
+                                    <option value="digital-art">Digital Art</option>
+                                    <option value="oil-painting">Oil Painting</option>
+                                    <option value="3d-render">3D Render</option>
+                                    <option value="sketch">Sketch</option>
+                                    <option value="cinematic">Cinematic</option>
+                                </select>
+                            </div>
+                            <div class="option-group">
+                                <label>Quality</label>
+                                <div class="quality-toggle">
+                                    <button class="q-btn active" data-quality="standard">Standard</button>
+                                    <button class="q-btn pro-only" data-quality="hd">HD</button>
+                                    <button class="q-btn pro-only" data-quality="ultra">Ultra</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Library Page -->
+            <section class="page" id="page-library">
+                <div class="page-header">
+                    <h1>My Images</h1>
+                    <p>Your generated images collection</p>
+                </div>
+                <div class="gallery-grid" id="galleryGrid">
+                    <div class="gallery-item">
+                        <img src="https://images.unsplash.com/photo-1515630278258-407f66498911?w=400&h=400&fit=crop" alt="">
+                        <div class="gallery-overlay">
+                            <p>Cyberpunk city at night</p>
+                            <div class="gallery-actions">
+                                <button><i class="fas fa-download"></i></button>
+                                <button><i class="fas fa-trash"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="gallery-item">
+                        <img src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&h=400&fit=crop" alt="">
+                        <div class="gallery-overlay">
+                            <p>Mountain sunrise landscape</p>
+                            <div class="gallery-actions">
+                                <button><i class="fas fa-download"></i></button>
+                                <button><i class="fas fa-trash"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="gallery-item">
+                        <img src="https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=400&h=400&fit=crop" alt="">
+                        <div class="gallery-overlay">
+                            <p>Abstract geometric pattern</p>
+                            <div class="gallery-actions">
+                                <button><i class="fas fa-download"></i></button>
+                                <button><i class="fas fa-trash"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="gallery-item">
+                        <img src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&h=400&fit=crop" alt="">
+                        <div class="gallery-overlay">
+                            <p>Futuristic portrait</p>
+                            <div class="gallery-actions">
+                                <button><i class="fas fa-download"></i></button>
+                                <button><i class="fas fa-trash"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="gallery-item">
+                        <img src="https://images.unsplash.com/photo-1633218388467-539651dcf81a?w=400&h=400&fit=crop" alt="">
+                        <div class="gallery-overlay">
+                            <p>Neon forest scene</p>
+                            <div class="gallery-actions">
+                                <button><i class="fas fa-download"></i></button>
+                                <button><i class="fas fa-trash"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="gallery-item">
+                        <img src="https://images.unsplash.com/photo-1614850523459-c2f4c699c52e?w=400&h=400&fit=crop" alt="">
+                        <div class="gallery-overlay">
+                            <p>Abstract fluid art</p>
+                            <div class="gallery-actions">
+                                <button><i class="fas fa-download"></i></button>
+                                <button><i class="fas fa-trash"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- History Page -->
+            <section class="page" id="page-history">
+                <div class="page-header">
+                    <h1>Generation History</h1>
+                    <p>Your recent AI generations</p>
+                </div>
+                <div class="history-list" id="historyList">
+                    <div class="history-item">
+                        <img src="https://images.unsplash.com/photo-1515630278258-407f66498911?w=100&h=100&fit=crop" alt="">
+                        <div class="history-info">
+                            <p class="history-prompt">A cyberpunk city at night with neon lights</p>
+                            <div class="history-meta">
+                                <span><i class="fas fa-microchip"></i> PixelForge V2</span>
+                                <span><i class="fas fa-clock"></i> 2 hours ago</span>
+                            </div>
+                        </div>
+                        <div class="history-actions">
+                            <button><i class="fas fa-download"></i></button>
+                            <button><i class="fas fa-clone"></i></button>
+                        </div>
+                    </div>
+                    <div class="history-item">
+                        <img src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=100&h=100&fit=crop" alt="">
+                        <div class="history-info">
+                            <p class="history-prompt">A serene mountain landscape at sunrise with golden light</p>
+                            <div class="history-meta">
+                                <span><i class="fas fa-microchip"></i> PixelForge V2</span>
+                                <span><i class="fas fa-clock"></i> 5 hours ago</span>
+                            </div>
+                        </div>
+                        <div class="history-actions">
+                            <button><i class="fas fa-download"></i></button>
+                            <button><i class="fas fa-clone"></i></button>
+                        </div>
+                    </div>
+                    <div class="history-item">
+                        <img src="https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=100&h=100&fit=crop" alt="">
+                        <div class="history-info">
+                            <p class="history-prompt">An abstract geometric pattern in purple and gold</p>
+                            <div class="history-meta">
+                                <span><i class="fas fa-microchip"></i> PixelForge V1</span>
+                                <span><i class="fas fa-clock"></i> Yesterday</span>
+                            </div>
+                        </div>
+                        <div class="history-actions">
+                            <button><i class="fas fa-download"></i></button>
+                            <button><i class="fas fa-clone"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Upgrade Modal -->
+    <div class="modal-overlay hidden" id="upgradeModal">
+        <div class="modal">
+            <button class="modal-close" id="closeModal">
+                <i class="fas fa-times"></i>
+            </button>
+            <div class="upgrade-header">
+                <div class="upgrade-icon">
+                    <i class="fas fa-gem"></i>
+                </div>
+                <h2>Upgrade to PixelForge Pro</h2>
+                <p>Unlock the full power of AI image generation</p>
+            </div>
+            <div class="plans">
+                <div class="plan-card">
+                    <div class="plan-header">
+                        <h3>Free</h3>
+                        <div class="plan-price">
+                            <span class="price">$0</span>
+                            <span class="period">/month</span>
+                        </div>
+                    </div>
+                    <ul class="plan-features">
+                        <li><i class="fas fa-check"></i> 10 generations/day</li>
+                        <li><i class="fas fa-check"></i> Standard quality</li>
+                        <li><i class="fas fa-check"></i> Basic styles</li>
+                        <li><i class="fas fa-check"></i> 1:1 & 16:9 ratios</li>
+                        <li class="disabled"><i class="fas fa-times"></i> HD images</li>
+                        <li class="disabled"><i class="fas fa-times"></i> No watermark</li>
+                        <li class="disabled"><i class="fas fa-times"></i> Private generations</li>
+                        <li class="disabled"><i class="fas fa-times"></i> Generation history</li>
+                    </ul>
+                    <button class="plan-btn current">Current Plan</button>
+                </div>
+                <div class="plan-card popular">
+                    <div class="popular-tag">Most Popular</div>
+                    <div class="plan-header">
+                        <h3>Pro</h3>
+                        <div class="plan-price">
+                            <span class="price">$12</span>
+                            <span class="period">/month</span>
+                        </div>
+                    </div>
+                    <ul class="plan-features">
+                        <li><i class="fas fa-check"></i> Unlimited generations</li>
+                        <li><i class="fas fa-check"></i> HD & Ultra HD quality</li>
+                        <li><i class="fas fa-check"></i> All styles & ratios</li>
+                        <li><i class="fas fa-check"></i> Faster generation</li>
+                        <li><i class="fas fa-check"></i> No watermark</li>
+                        <li><i class="fas fa-check"></i> Private generations</li>
+                        <li><i class="fas fa-check"></i> Full history</li>
+                        <li><i class="fas fa-check"></i> Priority support</li>
+                    </ul>
+                    <button class="plan-btn primary" id="subscribeBtn">Upgrade Now</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
