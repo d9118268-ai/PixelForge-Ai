@@ -10,11 +10,11 @@ const SUPABASE_ANON_KEY = ''; // e.g. 'eyJhbGciOiJIUzI1NiIs...'
 const OPENROUTER_KEY = '';    // e.g. 'sk-or-v1-...'
 
 // ===== AUTO-DETECT MODE =====
-const HAS_SUPABASE = SUPABASE_URL && SUPABASE_ANON_KEY;
-const HAS_OPENROUTER = OPENROUTER_KEY;
+const HAS_SUPABASE = SUPABASE_URL && SUPABASE_ANON_KEY && SUPABASE_URL !== 'https://your-project.supabase.co';
+const HAS_OPENROUTER = OPENROUTER_KEY && OPENROUTER_KEY !== 'your-anon-key' && OPENROUTER_KEY.startsWith('sk-or');
 
 let supabase = null;
-if (HAS_SUPABASE && window.supabase) {
+if (HAS_SUPABASE && typeof window.supabase !== 'undefined') {
     try {
         supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         console.log('✅ Supabase connected');
@@ -78,7 +78,7 @@ function getDemoResponse(input) {
     if (/^(hi|hello|hey|greetings|yo|sup)/.test(lower)) {
         return pickRandom(DEMO_RESPONSES.greetings);
     }
-    if (/image|picture|photo|generate|create|draw|paint|make|art|design/.test(lower)) {
+    if (/image|picture|photo|generate|create|draw|paint|make.*art|design|portrait|landscape|scene|character|logo|illustration|render|3d|anime|cartoon|realistic|fantasy|sci-fi|cyberpunk|abstract|watercolor|oil painting|sketch|concept art/.test(lower)) {
         return pickRandom(DEMO_RESPONSES.imageRelated);
     }
     if (/help|how|what can you|tips|guide/.test(lower)) {
@@ -106,6 +106,7 @@ function switchAuthTab(tab, btn) {
 function showAuthMessage(text, type) {
     authMessage.textContent = text;
     authMessage.className = 'auth-message ' + type;
+    authMessage.style.display = 'block';
 }
 
 function hideAuthMessage() {
@@ -113,81 +114,96 @@ function hideAuthMessage() {
     authMessage.style.display = 'none';
 }
 
-loginForm.addEventListener('submit', async (e) => {
+// LOGIN - prevent any default form behavior
+loginForm.addEventListener('submit', function(e) {
     e.preventDefault();
+    e.stopPropagation();
+
     const btn = document.getElementById('loginBtn');
     btn.disabled = true;
 
-    const email = document.getElementById('loginEmail').value;
+    const email = document.getElementById('loginEmail').value.trim();
     const password = document.getElementById('loginPassword').value;
 
-    if (supabase) {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) {
-            showAuthMessage(error.message, 'error');
-            btn.disabled = false;
-            return;
-        }
-        currentUser = data.user;
-    } else {
-        // Demo mode — works instantly, no backend needed
-        currentUser = { email, id: 'demo-' + Date.now() };
-        localStorage.setItem('pixelforge_user', JSON.stringify(currentUser));
+    if (!email || !password) {
+        showAuthMessage('Please fill in all fields', 'error');
+        btn.disabled = false;
+        return;
     }
+
+    // ALWAYS use demo mode for now (no Supabase redirect issues)
+    currentUser = { 
+        email: email, 
+        id: 'demo-' + Date.now(),
+        name: email.split('@')[0]
+    };
+    localStorage.setItem('pixelforge_user', JSON.stringify(currentUser));
     enterApp();
-});
-
-signupForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const btn = document.getElementById('signupBtn');
-    btn.disabled = true;
-
-    const email = document.getElementById('signupEmail').value;
-    const password = document.getElementById('signupPassword').value;
-
-    if (supabase) {
-        const { data, error } = await supabase.auth.signUp({
-            email, password,
-            options: { emailRedirectTo: window.location.href }
-        });
-        if (error) {
-            showAuthMessage(error.message, 'error');
-            btn.disabled = false;
-            return;
-        }
-        showAuthMessage('✅ Check your email to confirm your account!', 'success');
-    } else {
-        // Demo mode — instant signup, no email verification
-        currentUser = { email, id: 'demo-' + Date.now() };
-        localStorage.setItem('pixelforge_user', JSON.stringify(currentUser));
-        enterApp();
-    }
     btn.disabled = false;
 });
 
-async function signInWithGoogle() {
-    if (supabase) {
-        const { error } = await supabase.auth.signInWithOAuth({
-            provider: 'google',
-            options: { redirectTo: window.location.href }
-        });
-        if (error) showAuthMessage(error.message, 'error');
-    } else {
-        currentUser = { email: 'google@user.com', id: 'demo-google-' + Date.now() };
-        localStorage.setItem('pixelforge_user', JSON.stringify(currentUser));
-        enterApp();
+// SIGNUP - prevent any default form behavior
+signupForm.addEventListener('submit', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const btn = document.getElementById('signupBtn');
+    btn.disabled = true;
+
+    const email = document.getElementById('signupEmail').value.trim();
+    const password = document.getElementById('signupPassword').value;
+
+    if (!email || !password) {
+        showAuthMessage('Please fill in all fields', 'error');
+        btn.disabled = false;
+        return;
     }
+
+    if (password.length < 6) {
+        showAuthMessage('Password must be at least 6 characters', 'error');
+        btn.disabled = false;
+        return;
+    }
+
+    // ALWAYS use demo mode
+    currentUser = { 
+        email: email, 
+        id: 'demo-' + Date.now(),
+        name: email.split('@')[0]
+    };
+    localStorage.setItem('pixelforge_user', JSON.stringify(currentUser));
+    enterApp();
+    btn.disabled = false;
+});
+
+// GOOGLE SIGN IN - demo mode only (no redirects)
+function signInWithGoogle() {
+    // Demo mode — no redirects, no new tabs
+    currentUser = { 
+        email: 'google.user@gmail.com', 
+        id: 'demo-google-' + Date.now(),
+        name: 'Google User'
+    };
+    localStorage.setItem('pixelforge_user', JSON.stringify(currentUser));
+    enterApp();
 }
 
-async function logout() {
-    if (supabase) await supabase.auth.signOut();
+function logout() {
     localStorage.removeItem('pixelforge_user');
+    localStorage.removeItem('pixelforge_chat');
     currentUser = null;
+    chatHistory = [];
     userMenu.classList.add('hidden');
     authOverlay.classList.remove('hidden');
     loginForm.reset();
     signupForm.reset();
     hideAuthMessage();
+
+    // Reset to login tab
+    document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.auth-tab')[0].classList.add('active');
+    loginForm.classList.remove('hidden');
+    signupForm.classList.add('hidden');
 }
 
 function enterApp() {
@@ -201,31 +217,27 @@ function updateUserUI() {
     const email = currentUser.email || 'User';
     const initial = email[0].toUpperCase();
     document.getElementById('userAvatar').textContent = initial;
-    document.getElementById('userName').textContent = email.split('@')[0];
+    document.getElementById('userName').textContent = currentUser.name || email.split('@')[0];
 }
 
 function toggleUserMenu() {
     userMenu.classList.toggle('hidden');
 }
 
-document.addEventListener('click', (e) => {
+document.addEventListener('click', function(e) {
     if (!e.target.closest('.sidebar-footer')) {
         userMenu.classList.add('hidden');
     }
 });
 
-async function checkSession() {
+function checkSession() {
     const saved = localStorage.getItem('pixelforge_user');
     if (saved) {
-        currentUser = JSON.parse(saved);
-        enterApp();
-        return;
-    }
-    if (supabase) {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-            currentUser = session.user;
+        try {
+            currentUser = JSON.parse(saved);
             enterApp();
+        } catch(e) {
+            localStorage.removeItem('pixelforge_user');
         }
     }
 }
@@ -286,14 +298,11 @@ async function handleInput() {
     const prompt = promptInput.value.trim();
     if (!prompt || isGenerating || isChatting) return;
 
-    // Hide welcome, show chat
     welcomeScreen.style.display = 'none';
     chatMessages.classList.add('active');
 
-    // Add user message
     addUserMessage(prompt);
 
-    // Decide: image or chat?
     if (isImagePrompt(prompt)) {
         await generateImage(prompt);
     } else {
@@ -314,11 +323,10 @@ function addUserMessage(text) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-// ===== CHAT (with OpenRouter or demo fallback) =====
+// ===== CHAT =====
 async function sendChatMessage(prompt) {
     isChatting = true;
 
-    // Add loading message
     const aiMsg = document.createElement('div');
     aiMsg.className = 'message';
     aiMsg.id = 'chatResponse';
@@ -334,7 +342,6 @@ async function sendChatMessage(prompt) {
     let responseText = '';
 
     if (HAS_OPENROUTER) {
-        // Use OpenRouter for real AI chat
         try {
             const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                 method: 'POST',
@@ -356,22 +363,18 @@ async function sendChatMessage(prompt) {
             const data = await res.json();
             responseText = data.choices?.[0]?.message?.content || getDemoResponse(prompt);
         } catch (e) {
-            console.log('OpenRouter failed, using demo mode');
             responseText = getDemoResponse(prompt);
         }
     } else {
-        // Demo mode — instant response, no API needed
-        await delay(800); // Simulate thinking time
+        await delay(800);
         responseText = getDemoResponse(prompt);
     }
 
-    // Update chat history
     chatHistory.push({ role: 'user', content: prompt });
     chatHistory.push({ role: 'assistant', content: responseText });
     if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
     localStorage.setItem('pixelforge_chat', JSON.stringify(chatHistory));
 
-    // Show response
     const response = document.getElementById('chatResponse');
     response.innerHTML = `
         <div class="message-avatar ai">🔮</div>
@@ -382,7 +385,7 @@ async function sendChatMessage(prompt) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-// ===== IMAGE GENERATION (Pollinations — always free, no key) =====
+// ===== IMAGE GENERATION (Pollinations — always free) =====
 async function generateImage(prompt) {
     isGenerating = true;
 
@@ -404,7 +407,7 @@ async function generateImage(prompt) {
     const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&seed=${seed}&nologo=true&enhance=true`;
 
     const img = new Image();
-    img.onload = () => {
+    img.onload = function() {
         const response = document.getElementById('aiResponse');
         response.innerHTML = `
             <div class="message-avatar ai">🔮</div>
@@ -417,12 +420,11 @@ async function generateImage(prompt) {
             </div>
         `;
 
-        // Save to gallery
         const gen = {
             id: Date.now(),
-            prompt,
-            imageUrl,
-            seed,
+            prompt: prompt,
+            imageUrl: imageUrl,
+            seed: seed,
             timestamp: new Date().toISOString()
         };
         generations.unshift(gen);
@@ -433,7 +435,7 @@ async function generateImage(prompt) {
         chatMessages.scrollTop = chatMessages.scrollHeight;
     };
 
-    img.onerror = () => {
+    img.onerror = function() {
         const response = document.getElementById('aiResponse');
         response.innerHTML = `
             <div class="message-avatar ai">🔮</div>
@@ -459,21 +461,23 @@ function renderImages() {
     }
 
     empty.style.display = 'none';
-    grid.innerHTML = generations.map(g => `
-        <div class="image-card" onclick="downloadImage('${g.imageUrl}', '${escapeHtml(g.prompt)}')">
-            <img src="${g.imageUrl}" alt="${escapeHtml(g.prompt)}" loading="lazy">
-            <div class="image-card-info">
-                <p>${escapeHtml(g.prompt)}</p>
-                <div class="date">${formatDate(g.timestamp)}</div>
+    grid.innerHTML = generations.map(function(g) {
+        return `
+            <div class="image-card" onclick="downloadImage('${g.imageUrl}', '${escapeHtml(g.prompt)}')">
+                <img src="${g.imageUrl}" alt="${escapeHtml(g.prompt)}" loading="lazy">
+                <div class="image-card-info">
+                    <p>${escapeHtml(g.prompt)}</p>
+                    <div class="date">${formatDate(g.timestamp)}</div>
+                </div>
             </div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 function downloadImage(url, filename) {
     const a = document.createElement('a');
     a.href = url;
-    a.download = `pixelforge-${filename.substring(0, 30).replace(/[^a-z0-9]/gi, '-')}.png`;
+    a.download = 'pixelforge-' + filename.substring(0, 30).replace(/[^a-z0-9]/gi, '-') + '.png';
     a.target = '_blank';
     document.body.appendChild(a);
     a.click();
@@ -493,14 +497,14 @@ function hideUpgrade() {
 
 function switchBilling(type, btn) {
     currentBilling = type;
-    document.querySelectorAll('.billing-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.billing-btn').forEach(function(b) { b.classList.remove('active'); });
     btn.classList.add('active');
-    document.querySelectorAll('.plan-price .amount').forEach(el => {
+    document.querySelectorAll('.plan-price .amount').forEach(function(el) {
         el.textContent = el.getAttribute('data-' + type);
     });
 }
 
-upgradeModal.addEventListener('click', (e) => {
+upgradeModal.addEventListener('click', function(e) {
     if (e.target === upgradeModal) hideUpgrade();
 });
 
@@ -517,17 +521,17 @@ function formatDate(isoString) {
 }
 
 function delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise(function(resolve) { setTimeout(resolve, ms); });
 }
 
 // ===== INIT =====
 renderImages();
 
-window.addEventListener('resize', () => {
+window.addEventListener('resize', function() {
     if (window.innerWidth > 768) {
         sidebar.classList.remove('open');
     }
 });
 
 console.log('🔮 PixelForge AI loaded!');
-console.log('Mode:', HAS_SUPABASE ? 'Supabase' : 'Demo', '|', HAS_OPENROUTER ? 'OpenRouter' : 'Demo Chat');
+console.log('Mode: Demo (no API keys needed)');
