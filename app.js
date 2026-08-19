@@ -1,5 +1,33 @@
-// PIXELFORGE AI - Works instantly, no setup needed
+// ============================================================
+// PIXELFORGE AI - PRODUCTION READY
+// Supabase + Pollinations + OpenRouter
+// ============================================================
 
+// ===== YOUR SUPABASE KEYS (already filled in!) =====
+const SUPABASE_URL = 'https://ovgnqsijibfgynshtizv.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_2ZYiDvzzReYAcW6xQeVX-A_164sYKdz';
+
+// ===== ADD OPENROUTER KEY HERE WHEN YOU GET IT =====
+const OPENROUTER_KEY = '';
+// Go to openrouter.ai, sign up, create a key, paste it above
+// Example: const OPENROUTER_KEY = 'sk-or-v1-abc123...';
+
+// ===== AUTO-DETECT =====
+const HAS_SUPABASE = SUPABASE_URL && SUPABASE_ANON_KEY;
+const HAS_OPENROUTER = OPENROUTER_KEY && OPENROUTER_KEY.startsWith('sk-or');
+
+// Init Supabase
+let supabase = null;
+if (HAS_SUPABASE && typeof window.supabase !== 'undefined') {
+    try {
+        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        console.log('Supabase connected!');
+    } catch (e) {
+        console.log('Supabase error:', e.message);
+    }
+}
+
+// ===== STATE =====
 var currentUser = null;
 var isGenerating = false;
 var isChatting = false;
@@ -14,6 +42,7 @@ if (isDarkMode) {
     document.getElementById('darkModeToggle').textContent = '☀️';
 }
 
+// ===== DEMO RESPONSES (fallback) =====
 var DEMO_RESPONSES = {
     greetings: [
         "Hey there! I am PixelForge, your AI creative assistant. I can generate stunning images from your descriptions, or we can just chat! What would you like to create today?",
@@ -102,61 +131,60 @@ function doLogin() {
     var email = document.getElementById('loginEmail').value.trim();
     var password = document.getElementById('loginPassword').value;
 
-    if (!email) {
-        showAuthMessage('Please enter your email', 'error');
-        return;
-    }
-    if (!password) {
-        showAuthMessage('Please enter your password', 'error');
-        return;
-    }
+    if (!email) { showAuthMessage('Please enter your email', 'error'); return; }
+    if (!password) { showAuthMessage('Please enter your password', 'error'); return; }
 
-    currentUser = { 
-        email: email, 
-        id: 'demo-' + Date.now(),
-        name: email.split('@')[0]
-    };
-    localStorage.setItem('pixelforge_user', JSON.stringify(currentUser));
-    enterApp();
+    if (supabase) {
+        supabase.auth.signInWithPassword({ email: email, password: password }).then(function(result) {
+            if (result.error) {
+                showAuthMessage(result.error.message, 'error');
+            } else {
+                currentUser = result.data.user;
+                enterApp();
+            }
+        });
+    } else {
+        currentUser = { email: email, id: 'demo-' + Date.now(), name: email.split('@')[0] };
+        localStorage.setItem('pixelforge_user', JSON.stringify(currentUser));
+        enterApp();
+    }
 }
 
 function doSignup() {
     var email = document.getElementById('signupEmail').value.trim();
     var password = document.getElementById('signupPassword').value;
 
-    if (!email) {
-        showAuthMessage('Please enter your email', 'error');
-        return;
-    }
-    if (!password) {
-        showAuthMessage('Please enter a password', 'error');
-        return;
-    }
-    if (password.length < 6) {
-        showAuthMessage('Password must be at least 6 characters', 'error');
-        return;
-    }
+    if (!email) { showAuthMessage('Please enter your email', 'error'); return; }
+    if (!password) { showAuthMessage('Please enter a password', 'error'); return; }
+    if (password.length < 6) { showAuthMessage('Password must be at least 6 characters', 'error'); return; }
 
-    currentUser = { 
-        email: email, 
-        id: 'demo-' + Date.now(),
-        name: email.split('@')[0]
-    };
-    localStorage.setItem('pixelforge_user', JSON.stringify(currentUser));
-    enterApp();
+    if (supabase) {
+        supabase.auth.signUp({ email: email, password: password }).then(function(result) {
+            if (result.error) {
+                showAuthMessage(result.error.message, 'error');
+            } else {
+                showAuthMessage('Check your email to confirm your account!', 'success');
+            }
+        });
+    } else {
+        currentUser = { email: email, id: 'demo-' + Date.now(), name: email.split('@')[0] };
+        localStorage.setItem('pixelforge_user', JSON.stringify(currentUser));
+        enterApp();
+    }
 }
 
 function doGoogleLogin() {
-    currentUser = { 
-        email: 'google.user@gmail.com', 
-        id: 'demo-google-' + Date.now(),
-        name: 'Google User'
-    };
-    localStorage.setItem('pixelforge_user', JSON.stringify(currentUser));
-    enterApp();
+    if (supabase) {
+        supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.href } });
+    } else {
+        currentUser = { email: 'google.user@gmail.com', id: 'demo-google-' + Date.now(), name: 'Google User' };
+        localStorage.setItem('pixelforge_user', JSON.stringify(currentUser));
+        enterApp();
+    }
 }
 
 function doLogout() {
+    if (supabase) supabase.auth.signOut();
     localStorage.removeItem('pixelforge_user');
     localStorage.removeItem('pixelforge_chat');
     currentUser = null;
@@ -177,6 +205,7 @@ function enterApp() {
     document.getElementById('authOverlay').style.display = 'none';
     updateUserUI();
     renderImages();
+    loadFromSupabase();
 }
 
 function updateUserUI() {
@@ -199,18 +228,42 @@ document.addEventListener('click', function(e) {
 });
 
 function checkSession() {
+    if (supabase) {
+        supabase.auth.getSession().then(function(result) {
+            if (result.data.session) {
+                currentUser = result.data.session.user;
+                enterApp();
+            }
+        });
+    }
     var saved = localStorage.getItem('pixelforge_user');
     if (saved) {
-        try {
-            currentUser = JSON.parse(saved);
-            enterApp();
-        } catch(e) {
-            localStorage.removeItem('pixelforge_user');
-        }
+        try { currentUser = JSON.parse(saved); enterApp(); } catch(e) { localStorage.removeItem('pixelforge_user'); }
     }
 }
 
-// ===== EXPORT FUNCTIONS =====
+// ===== SUPABASE SYNC =====
+function loadFromSupabase() {
+    if (!supabase || !currentUser) return;
+    supabase.from('generations').select('data').eq('user_id', currentUser.id).single().then(function(result) {
+        if (result.data && result.data.data) {
+            generations = result.data.data;
+            localStorage.setItem('pixelforge_generations', JSON.stringify(generations));
+            renderImages();
+        }
+    });
+}
+
+function saveToSupabase() {
+    if (!supabase || !currentUser) return;
+    supabase.from('generations').upsert({
+        user_id: currentUser.id,
+        data: generations,
+        updated_at: new Date().toISOString()
+    }).then(function() { console.log('Saved to Supabase'); });
+}
+
+// ===== EXPORT =====
 function showExportModal() {
     document.getElementById('exportModal').style.display = 'flex';
     document.body.style.overflow = 'hidden';
@@ -223,44 +276,27 @@ function hideExportModal() {
 }
 
 function exportAsText() {
-    var text = 'PixelForge AI - Chat Export\n';
-    text += '========================\n\n';
-    text += 'Date: ' + new Date().toLocaleString() + '\n\n';
-
+    var text = 'PixelForge AI - Chat Export\n========================\n\nDate: ' + new Date().toLocaleString() + '\n\n';
     for (var i = 0; i < chatHistory.length; i++) {
-        var msg = chatHistory[i];
-        var role = msg.role === 'user' ? 'You' : 'PixelForge';
-        text += role + ':\n' + msg.content + '\n\n';
+        var role = chatHistory[i].role === 'user' ? 'You' : 'PixelForge';
+        text += role + ':\n' + chatHistory[i].content + '\n\n';
     }
-
     downloadFile(text, 'pixelforge-chat.txt', 'text/plain');
     hideExportModal();
 }
 
 function exportAsJSON() {
-    var data = {
-        app: 'PixelForge AI',
-        exportedAt: new Date().toISOString(),
-        user: currentUser ? currentUser.email : 'anonymous',
-        messages: chatHistory
-    };
+    var data = { app: 'PixelForge AI', exportedAt: new Date().toISOString(), user: currentUser ? currentUser.email : 'anonymous', messages: chatHistory };
     downloadFile(JSON.stringify(data, null, 2), 'pixelforge-chat.json', 'application/json');
     hideExportModal();
 }
 
 function exportAsMarkdown() {
-    var md = '# PixelForge AI - Chat Export\n\n';
-    md += '**Date:** ' + new Date().toLocaleString() + '\n\n';
-    md += '---\n\n';
-
+    var md = '# PixelForge AI - Chat Export\n\n**Date:** ' + new Date().toLocaleString() + '\n\n---\n\n';
     for (var i = 0; i < chatHistory.length; i++) {
-        var msg = chatHistory[i];
-        var role = msg.role === 'user' ? 'You' : 'PixelForge';
-        md += '## ' + role + '\n\n';
-        md += msg.content + '\n\n';
-        md += '---\n\n';
+        var role = chatHistory[i].role === 'user' ? 'You' : 'PixelForge';
+        md += '## ' + role + '\n\n' + chatHistory[i].content + '\n\n---\n\n';
     }
-
     downloadFile(md, 'pixelforge-chat.md', 'text/markdown');
     hideExportModal();
 }
@@ -268,29 +304,20 @@ function exportAsMarkdown() {
 function copyToClipboard() {
     var text = '';
     for (var i = 0; i < chatHistory.length; i++) {
-        var msg = chatHistory[i];
-        var role = msg.role === 'user' ? 'You' : 'PixelForge';
-        text += role + ': ' + msg.content + '\n\n';
+        var role = chatHistory[i].role === 'user' ? 'You' : 'PixelForge';
+        text += role + ': ' + chatHistory[i].content + '\n\n';
     }
-
-    navigator.clipboard.writeText(text).then(function() {
-        alert('Chat copied to clipboard!');
-        hideExportModal();
-    }).catch(function() {
-        alert('Could not copy to clipboard. Try exporting as a file instead.');
-    });
+    navigator.clipboard.writeText(text).then(function() { alert('Chat copied to clipboard!'); hideExportModal(); })
+        .catch(function() { alert('Could not copy. Try exporting as a file.'); });
 }
 
 function downloadFile(content, filename, type) {
     var blob = new Blob([content], { type: type });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
 document.getElementById('exportModal').addEventListener('click', function(e) {
@@ -301,26 +328,13 @@ document.getElementById('exportModal').addEventListener('click', function(e) {
 function switchView(view) {
     document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
     document.querySelectorAll('.view').forEach(function(v) { v.classList.remove('active'); });
-
-    if (view === 'chat') {
-        document.getElementById('navChat').classList.add('active');
-        document.getElementById('chatView').classList.add('active');
-    } else if (view === 'images') {
-        document.getElementById('navImages').classList.add('active');
-        document.getElementById('imagesView').classList.add('active');
-    } else if (view === 'library') {
-        document.getElementById('navLibrary').classList.add('active');
-        document.getElementById('libraryView').classList.add('active');
-    }
-
-    if (window.innerWidth <= 768) {
-        document.getElementById('sidebar').classList.remove('open');
-    }
+    if (view === 'chat') { document.getElementById('navChat').classList.add('active'); document.getElementById('chatView').classList.add('active'); }
+    else if (view === 'images') { document.getElementById('navImages').classList.add('active'); document.getElementById('imagesView').classList.add('active'); }
+    else if (view === 'library') { document.getElementById('navLibrary').classList.add('active'); document.getElementById('libraryView').classList.add('active'); }
+    if (window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('open');
 }
 
-function toggleSidebar() {
-    document.getElementById('sidebar').classList.toggle('open');
-}
+function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
 
 function newChat() {
     document.getElementById('welcomeScreen').style.display = 'block';
@@ -331,9 +345,7 @@ function newChat() {
     switchView('chat');
 }
 
-function newNotebook() {
-    alert('Notebooks coming soon!');
-}
+function newNotebook() { alert('Notebooks coming soon!'); }
 
 // ===== CHAT & IMAGE =====
 function isImagePrompt(text) {
@@ -341,27 +353,17 @@ function isImagePrompt(text) {
 }
 
 function handleKeyDown(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        handleInput();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleInput(); }
 }
 
 function handleInput() {
     var prompt = document.getElementById('promptInput').value.trim();
     if (!prompt || isGenerating || isChatting) return;
-
     document.getElementById('welcomeScreen').style.display = 'none';
     document.getElementById('chatMessages').classList.add('active');
-
     addUserMessage(prompt);
-
-    if (isImagePrompt(prompt)) {
-        generateImage(prompt);
-    } else {
-        sendChatMessage(prompt);
-    }
-
+    if (isImagePrompt(prompt)) generateImage(prompt);
+    else sendChatMessage(prompt);
     document.getElementById('promptInput').value = '';
 }
 
@@ -374,7 +376,8 @@ function addUserMessage(text) {
     document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
 }
 
-function sendChatMessage(prompt) {
+// ===== AI CHAT =====
+async function sendChatMessage(prompt) {
     isChatting = true;
 
     var aiMsg = document.createElement('div');
@@ -384,22 +387,62 @@ function sendChatMessage(prompt) {
     document.getElementById('chatMessages').appendChild(aiMsg);
     document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
 
-    setTimeout(function() {
-        var responseText = getDemoResponse(prompt);
+    var responseText = '';
 
-        chatHistory.push({ role: 'user', content: prompt });
-        chatHistory.push({ role: 'assistant', content: responseText });
-        if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
-        localStorage.setItem('pixelforge_chat', JSON.stringify(chatHistory));
+    if (HAS_OPENROUTER) {
+        try {
+            var res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + OPENROUTER_KEY,
+                    'Content-Type': 'application/json',
+                    'HTTP-Referer': window.location.href,
+                    'X-Title': 'PixelForge AI'
+                },
+                body: JSON.stringify({
+                    model: 'deepseek/deepseek-r1:free',
+                    messages: [
+                        { role: 'system', content: 'You are PixelForge AI, a creative assistant. Be friendly and encouraging.' },
+                        ...chatHistory.map(function(h) { return { role: h.role, content: h.content }; }),
+                        { role: 'user', content: prompt }
+                    ]
+                })
+            });
+            var data = await res.json();
+            responseText = data.choices?.[0]?.message?.content || getDemoResponse(prompt);
+        } catch (e) {
+            responseText = await tryPollinationsText(prompt);
+        }
+    } else {
+        responseText = await tryPollinationsText(prompt);
+    }
 
-        var response = document.getElementById('chatResponse');
-        response.innerHTML = '<div class="message-avatar ai">🔮</div><div class="message-body"><p>' + escapeHtml(responseText) + '</p></div>';
+    chatHistory.push({ role: 'user', content: prompt });
+    chatHistory.push({ role: 'assistant', content: responseText });
+    if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
+    localStorage.setItem('pixelforge_chat', JSON.stringify(chatHistory));
 
-        isChatting = false;
-        document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
-    }, 800);
+    var response = document.getElementById('chatResponse');
+    response.innerHTML = '<div class="message-avatar ai">🔮</div><div class="message-body"><p>' + escapeHtml(responseText) + '</p></div>';
+
+    isChatting = false;
+    document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
 }
 
+// Pollinations TEXT API (free!)
+async function tryPollinationsText(prompt) {
+    try {
+        var encodedPrompt = encodeURIComponent(prompt);
+        var res = await fetch('https://text.pollinations.ai/' + encodedPrompt + '?seed=' + Math.floor(Math.random() * 1000));
+        var text = await res.text();
+        if (text && text.length > 10) return text;
+        return getDemoResponse(prompt);
+    } catch (e) {
+        return getDemoResponse(prompt);
+    }
+}
+
+// ===== IMAGE GENERATION (Pollinations - free!) =====
 function generateImage(prompt) {
     isGenerating = true;
 
@@ -427,16 +470,11 @@ function generateImage(prompt) {
         html += '</div>';
         response.innerHTML = html;
 
-        var gen = {
-            id: Date.now(),
-            prompt: prompt,
-            imageUrl: imageUrl,
-            seed: seed,
-            timestamp: new Date().toISOString()
-        };
+        var gen = { id: Date.now(), prompt: prompt, imageUrl: imageUrl, seed: seed, timestamp: new Date().toISOString() };
         generations.unshift(gen);
         localStorage.setItem('pixelforge_generations', JSON.stringify(generations));
         renderImages();
+        saveToSupabase();
 
         isGenerating = false;
         document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
@@ -479,9 +517,7 @@ function downloadImage(url, filename) {
     a.href = url;
     a.download = 'pixelforge-' + filename.substring(0, 30).replace(/[^a-z0-9]/gi, '-') + '.png';
     a.target = '_blank';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 
 // ===== UPGRADE MODAL =====
@@ -499,9 +535,7 @@ function switchBilling(type, btn) {
     currentBilling = type;
     document.querySelectorAll('.billing-btn').forEach(function(b) { b.classList.remove('active'); });
     btn.classList.add('active');
-    document.querySelectorAll('.plan-price .amount').forEach(function(el) {
-        el.textContent = el.getAttribute('data-' + type);
-    });
+    document.querySelectorAll('.plan-price .amount').forEach(function(el) { el.textContent = el.getAttribute('data-' + type); });
 }
 
 document.getElementById('upgradeModal').addEventListener('click', function(e) {
@@ -525,9 +559,9 @@ checkSession();
 renderImages();
 
 window.addEventListener('resize', function() {
-    if (window.innerWidth > 768) {
-        document.getElementById('sidebar').classList.remove('open');
-    }
+    if (window.innerWidth > 768) document.getElementById('sidebar').classList.remove('open');
 });
 
 console.log('PixelForge AI loaded!');
+console.log('Supabase:', HAS_SUPABASE ? 'Connected' : 'Demo mode');
+console.log('OpenRouter:', HAS_OPENROUTER ? 'Connected' : 'Using Pollinations text or Demo');
