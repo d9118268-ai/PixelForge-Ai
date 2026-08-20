@@ -188,7 +188,7 @@ async function handleGenerate(source) {
     });
 
     card.classList.remove('forging');
-    card.innerHTML = `<img src="${imageUrl}" alt="${escapeHtml(prompt)}"><div class="prompt-tag">${escapeHtml(prompt)}</div>`;
+    card.innerHTML = `<img src="${imageUrl}" alt="${escapeHtml(prompt)}" onerror="this.closest('.result-card').classList.add('error'); this.closest('.result-card').innerHTML='Image was blocked from loading — if you\\'re on Brave or using an ad blocker, try allowing image.pollinations.ai.';"><div class="prompt-tag">${escapeHtml(prompt)}</div>`;
     card.addEventListener('click', () => openLightbox(imageUrl));
 
     const record = { id: Date.now(), prompt, imageUrl, model: els.modelSelect.value };
@@ -337,7 +337,7 @@ els.searchInput.addEventListener('input', () => {
 });
 
 /* ---------- upgrade modal ---------- */
-function openModal() { els.modalOverlay.hidden = false; }
+function openModal() { closeLightbox(); els.modalOverlay.hidden = false; }
 function closeModal() { els.modalOverlay.hidden = true; }
 els.upgradeBtn.addEventListener('click', openModal);
 els.modalClose.addEventListener('click', closeModal);
@@ -352,10 +352,18 @@ els.fakeUpgradeBtn.addEventListener('click', () => {
 
 /* ---------- lightbox ---------- */
 function openLightbox(src) {
+  closeModal();
   els.lightboxImg.src = src;
   els.lightboxOverlay.hidden = false;
 }
 function closeLightbox() { els.lightboxOverlay.hidden = true; }
+els.lightboxImg.addEventListener('error', () => {
+  // If the image can't load (e.g. an ad/tracker blocker like Brave Shields
+  // blocking image.pollinations.ai), don't leave a dead broken-image
+  // overlay stuck on screen — close it and say why.
+  closeLightbox();
+  alert('That image failed to load. If you\'re using Brave, an ad blocker, or a VPN, it may be blocking image.pollinations.ai — try allowing it for this site, or switch to a browser/extension setting that isn\'t blocking image requests.');
+});
 els.lightboxClose.addEventListener('click', closeLightbox);
 els.lightboxOverlay.addEventListener('click', (e) => { if (e.target === els.lightboxOverlay) closeLightbox(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeLightbox(); closeModal(); } });
