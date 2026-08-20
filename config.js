@@ -19,6 +19,10 @@
    ========================================================================== */
 
 const PIXELFORGE_CONFIG = {
+  // Shown in the greeting ("What are we forging, ___?") and the sidebar
+  // footer. Leave blank to fall back to "there".
+  DISPLAY_NAME: "david",
+
   // "pollinations" (free, default) or "custom" (your own/paid API)
   IMAGE_PROVIDER: "pollinations",
 

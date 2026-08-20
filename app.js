@@ -3,22 +3,31 @@
    ========================================================================== */
 
 const els = {
+  // hero (centered, empty-state) prompt box
+  heroPromptInput: document.getElementById('heroPromptInput'),
+  heroModelSelect: document.getElementById('heroModelSelect'),
+  heroUploadBtn: document.getElementById('heroUploadBtn'),
+
+  // docked (bottom) prompt box — shown once results exist
+  promptDock: document.getElementById('promptDock'),
   promptInput: document.getElementById('promptInput'),
   modelSelect: document.getElementById('modelSelect'),
   generateBtn: document.getElementById('generateBtn'),
   generateLabel: document.getElementById('generateLabel'),
-  generateArrow: document.getElementById('generateArrow'),
   uploadBtn: document.getElementById('uploadBtn'),
   fileInput: document.getElementById('fileInput'),
   refPreview: document.getElementById('refPreview'),
   refImg: document.getElementById('refImg'),
   refClear: document.getElementById('refClear'),
+
   canvasEmpty: document.getElementById('canvasEmpty'),
   resultsGrid: document.getElementById('resultsGrid'),
   recentList: document.getElementById('recentList'),
   gensLeft: document.getElementById('gensLeft'),
   newCreationBtn: document.getElementById('newCreationBtn'),
+  composeBtn: document.getElementById('composeBtn'),
   searchInput: document.getElementById('searchInput'),
+  searchTrigger: document.getElementById('searchTrigger'),
   upgradeBtn: document.getElementById('upgradeBtn'),
   modalOverlay: document.getElementById('modalOverlay'),
   modalClose: document.getElementById('modalClose'),
@@ -26,6 +35,13 @@ const els = {
   lightboxOverlay: document.getElementById('lightboxOverlay'),
   lightboxImg: document.getElementById('lightboxImg'),
   lightboxClose: document.getElementById('lightboxClose'),
+
+  sidebar: document.getElementById('sidebar'),
+  sidebarCollapse: document.getElementById('sidebarCollapse'),
+  sidebarExpand: document.getElementById('sidebarExpand'),
+  greetingName: document.getElementById('greetingName'),
+  userAvatar: document.getElementById('userAvatar'),
+  userName: document.getElementById('userName'),
 };
 
 let referenceImageDataUrl = null;
@@ -70,20 +86,48 @@ function updatePlanPill() {
   }
 }
 
-/* ---------- textarea auto-grow ---------- */
-els.promptInput.addEventListener('input', () => {
-  els.promptInput.style.height = 'auto';
-  els.promptInput.style.height = Math.min(els.promptInput.scrollHeight, 140) + 'px';
+/* ---------- personalized name (set DISPLAY_NAME in config.js) ---------- */
+(function initIdentity() {
+  const name = (typeof PIXELFORGE_CONFIG !== 'undefined' && PIXELFORGE_CONFIG.DISPLAY_NAME) || 'there';
+  els.greetingName.textContent = name;
+  els.userName.textContent = name;
+  els.userAvatar.textContent = name.charAt(0).toUpperCase();
+})();
+
+/* ---------- sidebar collapse (desktop) ---------- */
+els.sidebarCollapse.addEventListener('click', () => {
+  els.sidebar.classList.add('collapsed');
+  els.sidebarExpand.hidden = false;
 });
-els.promptInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    handleGenerate();
-  }
+els.sidebarExpand.addEventListener('click', () => {
+  els.sidebar.classList.remove('collapsed');
+  els.sidebarExpand.hidden = true;
 });
 
-/* ---------- reference image upload ---------- */
-els.uploadBtn.addEventListener('click', () => els.fileInput.click());
+/* ---------- search row focuses the real input ---------- */
+els.searchTrigger.addEventListener('click', (e) => {
+  if (e.target !== els.searchInput) els.searchInput.focus();
+});
+
+/* ---------- textarea auto-grow (both boxes) ---------- */
+function autoGrow(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+}
+[els.promptInput, els.heroPromptInput].forEach((ta) => {
+  ta.addEventListener('input', () => autoGrow(ta));
+  ta.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleGenerate(ta === els.heroPromptInput ? 'hero' : 'dock');
+    }
+  });
+});
+
+/* ---------- reference image upload (shared by both boxes) ---------- */
+function triggerUpload() { els.fileInput.click(); }
+els.uploadBtn.addEventListener('click', triggerUpload);
+els.heroUploadBtn.addEventListener('click', triggerUpload);
 els.fileInput.addEventListener('change', () => {
   const file = els.fileInput.files[0];
   if (!file) return;
@@ -102,12 +146,14 @@ els.refClear.addEventListener('click', () => {
 });
 
 /* ---------- generate ---------- */
-els.generateBtn.addEventListener('click', handleGenerate);
+els.generateBtn.addEventListener('click', () => handleGenerate('dock'));
 
-async function handleGenerate() {
+async function handleGenerate(source) {
   if (isGenerating) return;
-  const prompt = els.promptInput.value.trim();
-  if (!prompt) { els.promptInput.focus(); return; }
+  const activeInput = source === 'hero' ? els.heroPromptInput : els.promptInput;
+  const activeModel = source === 'hero' ? els.heroModelSelect : els.modelSelect;
+  const prompt = activeInput.value.trim();
+  if (!prompt) { activeInput.focus(); return; }
 
   const plan = getPlan();
   const usage = getUsage();
@@ -116,7 +162,17 @@ async function handleGenerate() {
     return;
   }
 
+  // first generation of the session: hide the centered hero box,
+  // reveal the bottom-docked bar (mirrors the "box drops to the bottom
+  // after the first message" pattern from the reference screenshots)
   els.canvasEmpty.style.display = 'none';
+  els.promptDock.hidden = false;
+  if (source === 'hero') {
+    els.promptInput.value = prompt;
+    els.modelSelect.value = activeModel.value;
+    autoGrow(els.promptInput);
+  }
+
   isGenerating = true;
   setGeneratingUI(true);
 
@@ -143,13 +199,15 @@ async function handleGenerate() {
 
     bumpUsage();
   } catch (err) {
-    console.error('PixelForge generation failed:', err);
+    console.error('GPT 9.0LM generation failed:', err);
     card.classList.remove('forging');
     card.classList.add('error');
     card.textContent = 'Generation failed — check your API config in config.js. See console for details.';
   } finally {
     isGenerating = false;
     setGeneratingUI(false);
+    els.promptInput.value = '';
+    autoGrow(els.promptInput);
   }
 }
 
@@ -229,16 +287,18 @@ function renderRecent() {
   list.slice(0, 25).forEach((g) => {
     const item = document.createElement('div');
     item.className = 'recent-item';
-    item.innerHTML = `<img src="${g.imageUrl}" alt=""><span>${escapeHtml(g.prompt)}</span>`;
+    item.textContent = g.prompt;
+    item.title = g.prompt;
     item.addEventListener('click', () => openLightbox(g.imageUrl));
     els.recentList.appendChild(item);
   });
 }
 
-function renderLibraryGrid() {
-  const list = loadGenerations();
+function renderGrid(list) {
   els.resultsGrid.innerHTML = '';
-  els.canvasEmpty.style.display = list.length ? 'none' : '';
+  const hasResults = list.length > 0;
+  els.canvasEmpty.style.display = hasResults ? 'none' : '';
+  els.promptDock.hidden = !hasResults;
   list.forEach((g) => {
     const card = document.createElement('div');
     card.className = 'result-card';
@@ -253,30 +313,27 @@ document.querySelectorAll('.nav-item').forEach((btn) => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.nav-item').forEach((b) => b.classList.remove('active'));
     btn.classList.add('active');
-    renderLibraryGrid();
+    renderGrid(loadGenerations());
   });
 });
 
-els.newCreationBtn.addEventListener('click', () => {
+function resetToHero() {
   els.promptInput.value = '';
-  els.promptInput.style.height = 'auto';
+  els.heroPromptInput.value = '';
+  autoGrow(els.promptInput);
+  autoGrow(els.heroPromptInput);
   els.resultsGrid.innerHTML = '';
+  els.promptDock.hidden = true;
   els.canvasEmpty.style.display = '';
-  els.promptInput.focus();
-});
+  els.heroPromptInput.focus();
+}
+els.newCreationBtn.addEventListener('click', resetToHero);
+els.composeBtn.addEventListener('click', resetToHero);
 
 els.searchInput.addEventListener('input', () => {
   const q = els.searchInput.value.trim().toLowerCase();
-  const list = loadGenerations().filter((g) => g.prompt.toLowerCase().includes(q));
-  els.resultsGrid.innerHTML = '';
-  els.canvasEmpty.style.display = list.length ? 'none' : '';
-  list.forEach((g) => {
-    const card = document.createElement('div');
-    card.className = 'result-card';
-    card.innerHTML = `<img src="${g.imageUrl}" alt="${escapeHtml(g.prompt)}"><div class="prompt-tag">${escapeHtml(g.prompt)}</div>`;
-    card.addEventListener('click', () => openLightbox(g.imageUrl));
-    els.resultsGrid.appendChild(card);
-  });
+  const list = q ? loadGenerations().filter((g) => g.prompt.toLowerCase().includes(q)) : loadGenerations();
+  renderGrid(list);
 });
 
 /* ---------- upgrade modal ---------- */
